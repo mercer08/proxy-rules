@@ -1,9 +1,70 @@
 [
-  {"domain": "localhost", "expected": "DIRECT"},
-  {"ip": "192.168.1.1", "expected": "DIRECT"},
-  {"ip": "fd00::1", "expected": "DIRECT"},
-  {"domain": "www.baidu.com", "expected": "DIRECT"},
-  {"domain": "www.google.com", "expected": "PROXY"},
-  {"ip": "149.154.167.50", "expected": "PROXY"},
-  {"domain": "unmatched-proxy-rule-test-91e10c.com", "expected": "PROXY"}
+  {
+    "domain": "localhost",
+    "expected": "DIRECT"
+  },
+  {
+    "ip": "192.168.1.1",
+    "expected": "DIRECT"
+  },
+  {
+    "ip": "fd00::1",
+    "expected": "DIRECT"
+  },
+  {
+    "domain": "www.baidu.com",
+    "expected": "DIRECT"
+  },
+  {
+    "domain": "www.google.com",
+    "expected": "PROXY"
+  },
+  {
+    "ip": "149.154.167.50",
+    "expected": "PROXY"
+  },
+  {
+    "domain": "unmatched-proxy-rule-test-91e10c.com",
+    "expected": "PROXY"
+  },
+  {
+    "domain": "removed-private-domain.invalid",
+    "expected": "DIRECT"
+  },
+  {
+    "domain": "removed-private-domain.invalid",
+    "expected": "DIRECT"
+  },
+  {
+    "domain": "api.launchdarkly.com",
+    "expected": "DIRECT"
+  },
+  {
+    "domain": "api.mexc.com",
+    "expected": "PROXY"
+  },
+  {
+    "domain": "clarity.ms",
+    "expected": "PROXY"
+  },
+  {
+    "domain": "futu.cn",
+    "expected": "PROXY"
+  },
+  {
+    "domain": "api-gl.lbkrs.com",
+    "expected": "PROXY"
+  },
+  {
+    "domain": "new-futu-endpoint.example.org",
+    "expected": "PROXY"
+  },
+  {
+    "ip": "1.14.242.1",
+    "expected": "PROXY"
+  },
+  {
+    "ip": "43.134.158.106",
+    "expected": "PROXY"
+  }
 ]

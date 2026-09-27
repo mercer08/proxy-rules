@@ -55,6 +55,8 @@ class RuleTests(unittest.TestCase):
         (root / "inputs").mkdir()
         for name in ("direct", "proxy", "reject", "allow"):
             (root / "custom" / (name + ".list")).write_text("")
+        for item in config.get("custom_sets", []):
+            (root / "custom" / (item["name"] + ".list")).write_text("")
         (root / "custom/exclude.json").write_text("{}")
         (root / "LICENSE").write_text("fixture license")
         (root / "NOTICE.md").write_text("fixture notice")
@@ -113,6 +115,46 @@ class RuleTests(unittest.TestCase):
             self.fixture(root)
             for name in ("direct", "proxy"):
                 (root / "custom" / (name + ".list")).write_text("DOMAIN,conflict.com\n")
+            with self.assertRaisesRegex(ValueError, "Conflicting"):
+                b.build(root, root / "out", root / "inputs", "a" * 40)
+
+    def test_named_rules_override_community_and_preserve_ip_and_keywords(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            for name in ("lan-com", "wan-com", "futu-broker"):
+                (root / "custom" / (name + ".list")).write_text((ROOT / "custom" / (name + ".list")).read_text())
+            (root / "inputs/direct.txt").write_text(b.yaml_payload(["+.mexc.com", "+.futu.cn"]))
+            (root / "inputs/reject.txt").write_text(b.yaml_payload(["+.launchdarkly.com", "+.clarity.ms"]))
+            (root / "inputs/cncidr.txt").write_text(b.yaml_payload(["1.14.242.0/23"]))
+            cases = [{"domain": "removed-private-domain.invalid", "expected": "DIRECT"},
+                     {"domain": "removed-private-domain.invalid", "expected": "DIRECT"},
+                     {"domain": "api.launchdarkly.com", "expected": "DIRECT"},
+                     {"domain": "api.mexc.com", "expected": "PROXY"},
+                     {"domain": "clarity.ms", "expected": "PROXY"},
+                     {"domain": "futu.cn", "expected": "PROXY"},
+                     {"domain": "new-futu-endpoint.example", "expected": "PROXY"},
+                     {"ip": "1.14.242.1", "expected": "PROXY"},
+                     {"ip": "43.134.158.106", "expected": "PROXY"},
+                     {"ip": "10.0.0.1", "expected": "DIRECT"}]
+            (root / "tests/cases.json").write_text(json.dumps(cases))
+            manifest = b.build(root, root / "out", root / "inputs", "a" * 40)
+            self.assertEqual(manifest["custom_counts"]["lan-com"], 24)
+            self.assertEqual(manifest["custom_counts"]["wan-com"], 19)
+            for client, filename in (("surge", "rules-ads.conf"), ("shadowrocket", "rules-ads.conf"), ("mihomo", "rules-ads.yaml")):
+                text = (root / "out" / client / filename).read_text()
+                self.assertLess(text.index("lan-com"), text.index("wan-com"))
+                self.assertLess(text.index("futu-broker"), text.index("/reject."))
+                self.assertLess(text.index("futu-broker"), text.index("/cn."))
+            self.assertIn("IP-CIDR,43.134.158.106/32,no-resolve", (root / "out/surge/futu-broker.list").read_text())
+            self.assertIn('"DOMAIN-KEYWORD,futu"', (root / "out/mihomo/futu-broker.yaml").read_text())
+
+    def test_named_conflicting_policies_fail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            for name in ("lan-com", "wan-com"):
+                (root / "custom" / (name + ".list")).write_text("DOMAIN,conflict.example\n")
             with self.assertRaisesRegex(ValueError, "Conflicting"):
                 b.build(root, root / "out", root / "inputs", "a" * 40)
 

@@ -1,6 +1,11 @@
 {
   "upstream": {"repository": "Loyalsoldier/clash-rules", "branch": "release"},
   "publish_repository": "mercer08/proxy-rules",
+  "custom_sets": [
+    {"name": "lan-com", "policy": "DIRECT"},
+    {"name": "wan-com", "policy": "PROXY"},
+    {"name": "futu-broker", "policy": "PROXY"}
+  ],
   "sets": {
     "private": {"file": "private.txt", "kind": "domain", "minimum": 5},
     "direct": {"file": "direct.txt", "kind": "domain", "minimum": 1000},
