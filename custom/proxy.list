@@ -1,0 +1,2 @@
+# 强制走 PROXY。每行一条规则，不带策略名。
+# DOMAIN,api.example.com

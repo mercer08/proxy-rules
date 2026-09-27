@@ -1,0 +1,2 @@
+# 社区广告拦截的放行例外：跳过社区 reject，继续匹配直连/代理规则。
+# DOMAIN-SUFFIX,allowed.example.com

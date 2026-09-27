@@ -1,0 +1,16 @@
+{
+  "upstream": {"repository": "Loyalsoldier/clash-rules", "branch": "release"},
+  "publish_repository": "mercer08/proxy-rules",
+  "sets": {
+    "private": {"file": "private.txt", "kind": "domain", "minimum": 5},
+    "direct": {"file": "direct.txt", "kind": "domain", "minimum": 1000},
+    "proxy": {"file": "proxy.txt", "kind": "domain", "minimum": 1000},
+    "reject": {"file": "reject.txt", "kind": "domain", "minimum": 1000},
+    "lan": {"file": "lancidr.txt", "kind": "ip", "minimum": 5},
+    "cn": {"file": "cncidr.txt", "kind": "ip", "minimum": 100},
+    "telegram": {"file": "telegramcidr.txt", "kind": "ip", "minimum": 1}
+  },
+  "count_change_limits": {"minimum_ratio": 0.5, "maximum_ratio": 2.0},
+  "default_policy": "PROXY",
+  "advertising_enabled": false
+}

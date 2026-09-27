@@ -1,0 +1,70 @@
+name: Sync rules
+
+on:
+  schedule:
+    # 08:17 Asia/Shanghai. UTC schedule avoids whole-hour traffic peaks.
+    - cron: '17 0 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rules-${{ github.event.pull_request.number || 'publish' }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Test conversion and policy behavior
+        run: python -m unittest discover -s tests -v
+      - name: Build and check upstream snapshot
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/build.py --output "$RUNNER_TEMP/rules" \
+            --previous-url "https://raw.githubusercontent.com/${{ github.repository }}/release/manifest.json"
+          cd "$RUNNER_TEMP/rules"
+          sha256sum --check checksums.sha256
+
+  publish:
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Build the snapshot and validate before publication
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python -m unittest discover -s tests -v
+          python scripts/build.py --output "$RUNNER_TEMP/rules" \
+            --previous-url "https://raw.githubusercontent.com/${{ github.repository }}/release/manifest.json"
+          cd "$RUNNER_TEMP/rules"
+          sha256sum --check checksums.sha256
+      - name: Publish stable files and versioned bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish.py --source "$RUNNER_TEMP/rules" --repository "$GITHUB_REPOSITORY"

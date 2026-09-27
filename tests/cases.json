@@ -1,0 +1,9 @@
+[
+  {"domain": "localhost", "expected": "DIRECT"},
+  {"ip": "192.168.1.1", "expected": "DIRECT"},
+  {"ip": "fd00::1", "expected": "DIRECT"},
+  {"domain": "www.baidu.com", "expected": "DIRECT"},
+  {"domain": "www.google.com", "expected": "PROXY"},
+  {"ip": "149.154.167.50", "expected": "PROXY"},
+  {"domain": "unmatched-proxy-rule-test-91e10c.com", "expected": "PROXY"}
+]

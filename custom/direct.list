@@ -1,0 +1,2 @@
+# 强制直连。每行一条规则，不带策略名。
+# DOMAIN-SUFFIX,example.com
