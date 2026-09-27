@@ -1,0 +1,67 @@
+# Merge this fragment into a full profile with a PROXY group.
+rule-providers:
+  private:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/private.yaml"
+    path: ./ruleset/private.yaml
+    interval: 86400
+    proxy: PROXY
+  lan:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: "https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/lan.yaml"
+    path: ./ruleset/lan.yaml
+    interval: 86400
+    proxy: PROXY
+  reject:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/reject.yaml"
+    path: ./ruleset/reject.yaml
+    interval: 86400
+    proxy: PROXY
+  proxy:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/proxy.yaml"
+    path: ./ruleset/proxy.yaml
+    interval: 86400
+    proxy: PROXY
+  direct:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/direct.yaml"
+    path: ./ruleset/direct.yaml
+    interval: 86400
+    proxy: PROXY
+  telegram:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: "https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/telegram.yaml"
+    path: ./ruleset/telegram.yaml
+    interval: 86400
+    proxy: PROXY
+  cn:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: "https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/cn.yaml"
+    path: ./ruleset/cn.yaml
+    interval: 86400
+    proxy: PROXY
+rules:
+  - "RULE-SET,private,DIRECT"
+  - "RULE-SET,lan,DIRECT,no-resolve"
+  - "RULE-SET,reject,REJECT"
+  - "RULE-SET,proxy,PROXY"
+  - "RULE-SET,direct,DIRECT"
+  - "RULE-SET,telegram,PROXY,no-resolve"
+  - "RULE-SET,cn,DIRECT,no-resolve"
+  - "MATCH,PROXY"
