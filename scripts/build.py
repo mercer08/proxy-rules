@@ -136,18 +136,26 @@ def matches(rule, domain=None, ip=None):
     return value in domain
 
 
-def effective_groups(sets, custom, ads):
+def custom_order(config):
+    return [("direct", "DIRECT"), ("proxy", "PROXY"), ("reject", "REJECT")] + [
+        (item["name"], item["policy"]) for item in config.get("custom_sets", [])]
+
+
+def custom_output_name(name):
+    return "custom-" + name if name in ("direct", "proxy", "reject") else name
+
+
+def effective_groups(sets, custom, ads, config=None):
     return [
         (sets["private"], "DIRECT"), (sets["lan"], "DIRECT"),
-        (custom["direct"], "DIRECT"), (custom["proxy"], "PROXY"),
-        (custom["reject"], "REJECT"),
+        *[(custom[name], policy) for name, policy in custom_order(config or {})],
         (sets["reject"] if ads else set(), "REJECT"),
         (sets["proxy"], "PROXY"), (sets["direct"], "DIRECT"),
         (sets["telegram"], "PROXY"), (sets["cn"], "DIRECT")]
 
 
-def verify_cases(sets, custom, cases, ads, default):
-    groups = effective_groups(sets, custom, ads)
+def verify_cases(sets, custom, cases, ads, default, config=None):
+    groups = effective_groups(sets, custom, ads, config)
     for case in cases:
         policy = default
         for rules, destination in groups:
@@ -186,7 +194,7 @@ def yaml_payload(items):
 
 def render(output, sets, custom, config):
     all_sets = dict(sets)
-    all_sets.update({"custom-" + name: rules for name, rules in custom.items()})
+    all_sets.update({custom_output_name(name): rules for name, rules in custom.items()})
     for name, rules in all_sets.items():
         ordered = sorted(rules)
         classical = [serialize_rule(rule) for rule in ordered]
@@ -205,7 +213,7 @@ def render(output, sets, custom, config):
 
     base = "https://raw.githubusercontent.com/" + config["publish_repository"] + "/release/"
     order = [("private", "DIRECT"), ("lan", "DIRECT"),
-             ("custom-direct", "DIRECT"), ("custom-proxy", "PROXY"), ("custom-reject", "REJECT"),
+             *[(custom_output_name(name), policy) for name, policy in custom_order(config)],
              ("reject", "REJECT"), ("proxy", "PROXY"), ("direct", "DIRECT"),
              ("telegram", "PROXY"), ("cn", "DIRECT")]
     for ads in (False, True):
@@ -270,10 +278,22 @@ def build(root, output, input_dir=None, commit=None, previous=None):
         sets[name] = rules - removals
         if not sets[name]:
             raise ValueError("Exclusions emptied source: " + name)
-    custom = {name: custom_rules(root / "custom" / (name + ".list")) for name in ("direct", "proxy", "reject")}
-    for left, right in (("direct", "proxy"), ("direct", "reject"), ("proxy", "reject")):
-        if custom[left] & custom[right]:
-            raise ValueError("Conflicting custom rules in %s and %s" % (left, right))
+    order = custom_order(config)
+    names = [name for name, _ in order]
+    if len(names) != len(set(names)):
+        raise ValueError("Duplicate custom rule set name")
+    if len({custom_output_name(name) for name in names}) != len(names):
+        raise ValueError("Duplicate custom output name")
+    for name, policy in order:
+        if not re.fullmatch(r"[a-z][a-z0-9-]*", name) or custom_output_name(name) in sets or name == "allow":
+            raise ValueError("Invalid custom rule set name: " + name)
+        if policy not in ("DIRECT", "PROXY", "REJECT"):
+            raise ValueError("Invalid custom policy: " + policy)
+    custom = {name: custom_rules(root / "custom" / (name + ".list")) for name in names}
+    for index, (left, left_policy) in enumerate(order):
+        for right, right_policy in order[index + 1:]:
+            if left_policy != right_policy and custom[left] & custom[right]:
+                raise ValueError("Conflicting custom rules in %s and %s" % (left, right))
     allow = custom_rules(root / "custom/allow.list")
     # A narrower exception cannot override a broader block without a special
     # client-dependent sub-rule. Require removal of the blocking parent instead.
@@ -288,8 +308,8 @@ def build(root, output, input_dir=None, commit=None, previous=None):
     counts = {name: len(rules) for name, rules in sets.items()}
     check_counts(counts, previous, config["count_change_limits"])
     cases = json.loads((root / "tests/cases.json").read_text())
-    verify_cases(sets, custom, cases, False, config["default_policy"])
-    verify_cases(sets, custom, cases, True, config["default_policy"])
+    verify_cases(sets, custom, cases, False, config["default_policy"], config)
+    verify_cases(sets, custom, cases, True, config["default_policy"], config)
     render(output, sets, custom, config)
     write(output / "LICENSE", (root / "LICENSE").read_text())
     write(output / "NOTICE.md", (root / "NOTICE.md").read_text())

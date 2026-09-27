@@ -29,6 +29,7 @@ Surge 及 Shadowrocket 的下载方式应在完整配置中设置。不要把 Gi
 
 1. 局域网域名和保留 IP：`DIRECT`。
 2. 自定义强制直连、强制代理、自定义拦截。
+   然后依次匹配 `lan-com`（DIRECT）、`wan-com`（PROXY）、`futu-broker`（PROXY）。
 3. 社区广告拦截：仅在 `rules-ads` 片段启用。
 4. 上游明确代理域名：`PROXY`。
 5. 上游国内／直连域名：`DIRECT`。
@@ -53,6 +54,15 @@ DNS 解析行为需要在完整客户端模板中配置。本仓库的匹配检�
 | `custom/reject.list` | 自己的拦截；默认配置也生效 |
 | `custom/allow.list` | 从广告列表中移除例外，然后继续按正常规则分流 |
 | `custom/exclude.json` | 精确删除指定分类的某条上游规则 |
+| `custom/lan-com.list` | MEXC 内部及开发服务，`DIRECT` |
+| `custom/wan-com.list` | MEXC 公网服务，`PROXY` |
+| `custom/futu-broker.list` | 富途、Moomoo、长桥、老虎券商，`PROXY` |
+
+三组业务规则均在社区广告、代理、国内域名和国内 IP 规则之前匹配，在普通及广告配置中都启用。
+三组分别发布到各客户端目录，文件名保留 `lan-com`、`wan-com`、`futu-broker`；Mihomo 使用 classical YAML。
+出口及组内顺序在 `sources.json` 的 `custom_sets` 中维护，通用自定义三组优先于业务组。
+券商列表的关键词按子串匹配；`cloudfront.net`、`s3.eu-central-1.amazonaws.com`、`launchdarkly.com`
+等后缀包含其他服务，仍按用户提供的范围保留。IP 规则保留 `no-resolve`。
 
 每行一条、不带策略名，支持：
 
@@ -78,7 +88,7 @@ IP-CIDR6,2001:db8::/32,no-resolve
 这里的 example.com 只是语法示例，不要未经核对就加入实际排除文件。
 
 规则类型超出支持范围、IP 类型不匹配或包含策略名时，构建直接失败。
-初始自定义文件仅包含注释，不添加任何私人域名。这个仓库是公开的，请只提交可以公开的规则。
+通用自定义文件初始仅包含注释；三组业务文件包含用户提供的规则。这个仓库是公开的，请只提交可以公开的规则。
 
 ## 更新与发布
 

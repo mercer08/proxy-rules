@@ -1,0 +1,27 @@
+# NAME: MEXC_LAN
+# DESC: MEXC internal and development services
+
+DOMAIN,otcs3.atomuai.com
+DOMAIN,sensors-mgt.atomutest.com
+DOMAIN,sensors-data.atomutest.com
+DOMAIN,www.mxcd.top
+DOMAIN,npm.cddaxia.com
+DOMAIN,pipeline.cddaxia.com
+DOMAIN,luban.k8s
+DOMAIN,www.atomupre.com
+DOMAIN,luban.plumn.xyz
+DOMAIN,web-infra.plumn.xyz
+DOMAIN-SUFFIX,plumn.xyz
+DOMAIN-SUFFIX,launchdarkly.com
+DOMAIN-SUFFIX,cdreamland.com
+DOMAIN-SUFFIX,mxcd.top
+DOMAIN-SUFFIX,mxcd.xyz
+DOMAIN-SUFFIX,mxcb.xyz
+DOMAIN-SUFFIX,cddaxia.com
+DOMAIN-SUFFIX,pmxc.top
+DOMAIN-SUFFIX,mxct.top
+DOMAIN-SUFFIX,mxcl.top
+DOMAIN-SUFFIX,mxcn.top
+DOMAIN-SUFFIX,ncaofo.com
+DOMAIN-SUFFIX,bainianla.top
+DOMAIN-SUFFIX,jmchunmei.com

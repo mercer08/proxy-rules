@@ -1,0 +1,22 @@
+# NAME: MEXC_WAN
+# DESC: MEXC public internet services
+
+DOMAIN-SUFFIX,mexc.com
+DOMAIN-SUFFIX,mocortech.com
+DOMAIN-SUFFIX,aboutamazon.pl
+DOMAIN-SUFFIX,gotoda.co
+DOMAIN-SUFFIX,mexcsensors.com
+DOMAIN-SUFFIX,greentreeone.com
+DOMAIN-SUFFIX,365huo.xyz
+DOMAIN-SUFFIX,ytoo.li
+DOMAIN-SUFFIX,clarity.ms
+DOMAIN-SUFFIX,amplitude.com
+DOMAIN-SUFFIX,g2crowd.com
+DOMAIN-SUFFIX,taboola.com
+DOMAIN-SUFFIX,lokalise.com
+DOMAIN,lokalise-live-lok-s3-fss-export.s3.eu-central-1.amazonaws.com
+DOMAIN-SUFFIX,s3.eu-central-1.amazonaws.com
+DOMAIN-SUFFIX,cloudfront.net
+DOMAIN-SUFFIX,goperp.exchange
+DOMAIN-SUFFIX,flytogarden.com
+DOMAIN-SUFFIX,hotbookzone.com
