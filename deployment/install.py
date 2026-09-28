@@ -86,10 +86,9 @@ def prepare(source):
     if not CONFIG.exists():
         atomic_write(CONFIG, (source / "config.example.json").read_bytes())
     config = json.loads(CONFIG.read_text())
-    for path in [config["state_dir"], config["public_dir"], "/var/lib/sub-store"]:
+    for path in [config["state_dir"], "/var/lib/sub-store"]:
         Path(path).mkdir(parents=True, exist_ok=True)
     os.chmod(config["state_dir"], 0o700)
-    os.chmod(config["public_dir"], 0o755)
     node_dir = BASE / ("node-v" + NODE_VERSION + "-linux-x64")
     if not node_dir.exists():
         filename = node_dir.name + ".tar.xz"
