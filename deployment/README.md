@@ -23,7 +23,7 @@ jsDelivr 的 Near China 网络不能保证所有大陆线路可达，需在使�
 Surge 托管配置建议每 12 小时刷新，Mihomo 订阅刷新频率在客户端中设置。
 
 只导出 `config.json` 明确映射的入站，外部地址统一使用现有 IP、443 和 TLS。
-当前映射为 `dmit-direct` → `DMIT-Native`、`dmit-warp` → `DMIT-WARP`。
+当前仅映射 `dmit-direct` → `DMIT-Native`。
 数据库仅以只读模式打开，并核对 3x-ui 3.7 的规范账号表、启用状态、到期时间和入站关联。
 未激活的首次使用到期账号暂不导出。流量额度仍由 Xray/3x-ui 执行。
 
@@ -82,8 +82,8 @@ Surge/Shadowrocket 路由、Mihomo provider、DNS 分类及 fake-ip 排除项均
 
 Shadowrocket 每个账号都有自己的分流配置，规则范围与 Surge/Mihomo 一致。
 旧共用地址 `https://179.253.248.30/proxy-config/shadowrocket.conf` 保留为不含业务专项规则的基础配置。
-其策略组仅选择名称为 `DMIT-Native` 或 `DMIT-WARP` 的节点。
-默认使用 Native，WARP 可手工选择。没有增加代理失败后自动直连的策略。
+其策略组仅选择名称为 `DMIT-Native` 的节点。
+没有增加代理失败后自动直连的策略。
 
 Nginx 仅开放限定格式的配置和规则路径；不转发 Sub-Store 的管理 API。
 个人配置禁止缓存，相关 access/error 日志关闭，文件只允许 root 和 Nginx worker group 读取。
@@ -97,8 +97,7 @@ Nginx 仅开放限定格式的配置和规则路径；不转发 Sub-Store 的管
 - Shadowrocket 使用系统 DNS 和直连系统解析；代理 DNS 行为需在实际设备上验证。
 - 当前 Xray 阻断全部代理 UDP，因此映射节点的 `udp` 为 false。Surge 和 Shadowrocket 模板阻断代理 QUIC，
   避免将不支持的流量自动直连。保留直连网络的 QUIC 行为。
-- 分发部署不会修改 Xray 的 UDP 路由。确认服务器与客户端支持后，可单独开启 Native 的 UDP；
-  WARP 本地 SOCKS 目前不支持 UDP，不能一起宣称支持。
+- 分发部署不会修改 Xray 的 UDP 路由。确认服务器与客户端支持后，可单独开启 Native 的 UDP。
 - 普通 HTTP 系统代理不能捕获全部应用流量；需要时在对应客户端开启 VPN/TUN/增强模式。
 
 所有配置保持 TLS 证书验证。IP 证书的续期由既有证书管理流程执行。
