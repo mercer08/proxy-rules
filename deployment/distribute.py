@@ -26,6 +26,29 @@ import urllib.request
 MAX_BUNDLE = 32 * 1024 * 1024
 MAX_EXPANDED = 96 * 1024 * 1024
 BUSINESS_RULE_SETS = {"lan-com", "wan-com", "futu-broker"}
+PROFILE_FILES = ("surge.conf", "mihomo.yaml", "shadowrocket.conf", "shadowrocket.txt", "node.txt")
+
+
+def profile_overrides(state):
+    """Only recognized private account folders and filenames can override output."""
+    root = Path(state) / "profile-overrides"
+    result = {}
+    if not root.exists():
+        return result
+    if root.is_symlink():
+        raise ValueError("Unsafe override directory")
+    for folder in root.iterdir():
+        if not re.fullmatch(r"[a-f0-9]{24}", folder.name):
+            continue
+        if folder.is_symlink() or not folder.is_dir():
+            raise ValueError("Unsafe account override directory")
+        for name in PROFILE_FILES:
+            path = folder / name
+            if path.exists():
+                if path.is_symlink() or not path.is_file() or path.stat().st_size > 2 * 1024 * 1024:
+                    raise ValueError("Unsafe profile override")
+                result[folder.name + "/" + name] = path.read_text()
+    return result
 
 
 def fetch(url, limit=MAX_BUNDLE, method=None, data=None):
@@ -435,10 +458,11 @@ def generate(config):
     config = dict(config, _rules_tag=rule_state["tag"])
     rules_dir = state / "rules/releases" / digest
     accounts = load_accounts(config)
+    overrides = profile_overrides(state)
     template_files = sorted(Path(config["templates_dir"]).glob("*"))
     template_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in template_files if p.is_file()}
     fingerprint = hashlib.sha256(json.dumps({"config": config, "accounts": accounts, "rules": digest,
-                                            "templates": template_hashes,
+                                            "templates": template_hashes, "overrides": overrides,
                                             "generator": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}, sort_keys=True).encode()).hexdigest()
     current = state / "profiles.json"
     if current.exists() and json.loads(current.read_text()).get("fingerprint") == fingerprint:
@@ -462,12 +486,17 @@ def generate(config):
             folder = hashlib.sha256(account_key.encode()).hexdigest()[:24]
             converted = substore(config, account_key, account["nodes"])
             profiles = render_profiles(config, account, converted, "", rules_dir, digest)
+            edited = []
+            for name in profiles:
+                if folder + "/" + name in overrides:
+                    profiles[name] = overrides[folder + "/" + name]
+                    edited.append(name)
             directory = staging / folder
             directory.mkdir()
             for name, content in profiles.items():
                 (directory / name).write_text(content)
             records.append({"label": account["label"], "business_rules": account["business_rules"],
-                            "nodes": [n["name"] for n in account["nodes"]],
+                            "nodes": [n["name"] for n in account["nodes"]], "edited": edited,
                             "files": {name: str(profiles_root / "current" / folder / name) for name in profiles}})
         shared = staging / "shared"
         shared.mkdir()
