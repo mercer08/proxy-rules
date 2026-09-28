@@ -59,13 +59,19 @@ python3 /opt/proxy-distribution/install.py publish \
 账号 email，值为订阅清单显示名。修改后生成 profiles 即可；不会改变面板账号标识、
 节点 UUID 或下载令牌。真实姓名和名称映射也不应提交到公开仓库。
 
+`business_rule_accounts` 是允许使用 `lan-com`、`wan-com`、`futu-broker` 专项规则的
+3x-ui 账号 email 列表，默认空列表。只有明确列出的账号加入这些规则；其他账号的
+Surge/Shadowrocket 路由、Mihomo provider、DNS 分类及 fake-ip 排除项均不包含这些专项覆盖。
+普通公共域名列表仍按原样应用，不从中删除 MEXC 或券商的公共域名。
+
 | 客户端 | 导入方式 |
 | --- | --- |
 | Surge | 对应账号的 `surge.conf` 托管配置链接 |
 | Mihomo | 对应账号的 `mihomo.yaml` 远程配置链接 |
-| Shadowrocket | 对应账号的 `shadowrocket.txt` 节点订阅，并在配置页添加、启用共用配置 |
+| Shadowrocket | 对应账号的 `shadowrocket.txt` 节点订阅，并在配置页添加、启用同账号的 `shadowrocket.conf` |
 
-Shadowrocket 共用配置为 `https://179.253.248.30/proxy-config/shadowrocket.conf`。
+Shadowrocket 每个账号都有自己的分流配置，规则范围与 Surge/Mihomo 一致。
+旧共用地址 `https://179.253.248.30/proxy-config/shadowrocket.conf` 保留为不含业务专项规则的基础配置。
 其策略组仅选择名称为 `DMIT-Native` 或 `DMIT-WARP` 的节点。
 默认使用 Native，WARP 可手工选择。没有增加代理失败后自动直连的策略。
 
