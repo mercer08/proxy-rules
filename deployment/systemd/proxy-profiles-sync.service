@@ -12,4 +12,4 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadOnlyPaths=/etc/x-ui
-ReadWritePaths=/var/lib/proxy-distribution /var/www/proxy-distribution
+ReadWritePaths=/var/lib/proxy-distribution

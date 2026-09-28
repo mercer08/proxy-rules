@@ -148,6 +148,15 @@ class DistributionTests(unittest.TestCase):
                     self.assertEqual(file.parent.stat().st_mode & 0o777, 0o700)
                     self.assertNotIn("/profiles/", file.read_text())
             self.assertFalse((state / "tokens.json").exists())
+            friend_id = hashlib.sha256(b"friend").hexdigest()[:24]
+            override = state / "profile-overrides" / friend_id / "surge.conf"
+            d.atomic_write(override, "[Rule]\nFINAL,PROXY\n# persistent personal edit\n")
+            with patch.object(d, "load_accounts", return_value=accounts), patch.object(d, "substore", return_value=converted):
+                d.generate(config)
+                d.generate(config)
+            friend = next(r for r in json.loads((state / "profiles.json").read_text())["accounts"] if r["label"] == "friend")
+            self.assertEqual(friend["edited"], ["surge.conf"])
+            self.assertIn("persistent personal edit", Path(friend["files"]["surge.conf"]).read_text())
             output = io.BytesIO()
             d.export_profiles(config, output, "friend")
             with tarfile.open(fileobj=io.BytesIO(output.getvalue()), mode="r:gz") as exported:
