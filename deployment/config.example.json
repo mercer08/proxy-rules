@@ -10,6 +10,6 @@
   "state_dir": "/var/lib/proxy-distribution",
   "business_rule_accounts": [],
   "inbounds": {
-    "dmit-direct": {"name": "DMIT-Native", "udp": false}
+    "dmit-direct": {"name": "DMIT-Native", "udp": true}
   }
 }
