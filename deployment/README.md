@@ -122,11 +122,15 @@ Sub-Store 升级需要另行核对官方版本，规则同步不会升级程序�
 
 Surge 使用系统 DNS；Mihomo 使用 fake-ip，沿用分流顺序配置 DNS，内部域名排除 fake-ip。
 Shadowrocket DNS 和 Surge/Shadowrocket 导入需在实际设备验证。
-普通代理 UDP 开启，节点 udp 为 true；Surge/Shadowrocket 阻断代理 QUIC，
-Mihomo 在每条 PROXY 规则之前拒绝该规则匹配的 UDP/443，保留原分流顺序与直连 QUIC。
-服务器 Xray 同时拒绝代理 UDP/443 和嗅探到的 QUIC，其余 UDP 按原有路由转发。
+普通代理 UDP 与 QUIC 均开启，节点 udp 为 true；Surge/Shadowrocket 使用 block-quic = always-allow，
+Mihomo 不插入 UDP/443 拒绝规则，保留原分流顺序。
+服务器须同时移除 3x-ui 持久化 xrayTemplateConfig 中的 UDP/443 和 QUIC 拦截，
+否则仅更新客户端文件不会放行代理 QUIC。保留其他安全路由与内网直连规则。
+Mihomo 使用可读的 YAML 排版，fake-ip-filter 引用 private 规则集；仅启用个人业务规则的账号引用 lan-com。
+需要在客户端开启 TUN/VPN 才能接管普通应用的 UDP；此配置不自动开启 TUN 或改变设备路由。
 本部署不修改 IPv6，所有节点保留 TLS 证书验证。
 
 Mihomo 可用官方核心执行 `mihomo -t -d <目录> -f <配置>`。
+Python 测试先安装 `python -m pip install -r tests/requirements.txt`；服务器生成器仍只依赖标准库。
 jsDelivr 可达性需要在实际网络测试，无法保证所有大陆线路。
 普通 HTTP 系统代理不能接管全部应用流量，需要时在客户端启用 VPN/TUN。
