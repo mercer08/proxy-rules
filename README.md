@@ -132,6 +132,10 @@ shasum -a 256 -c checksums.sha256
 
 ## 与 DMIT / Sub-Store 串联
 
+已提供可部署的 [DMIT 分发脚本与客户端模板](deployment/README.md)，包含校验镜像、
+只读读取 3x-ui 账号、本机 Sub-Store 转换、个人链接生成、Nginx 下载路径和 systemd 更新任务。
+敏感账号清单和访问令牌在 VPS 私有目录生成，不属于 GitHub 发布产物。
+
 DMIT 拉取完整版本包并校验 → 解压到新的版本目录 → 校验通过后切换规则镜像目录
 → 客户端模板引用镜像规则。
 

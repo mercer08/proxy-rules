@@ -1,0 +1,16 @@
+{
+  "repository": "mercer08/proxy-rules",
+  "server": "179.253.248.30",
+  "port": 443,
+  "public_url": "https://179.253.248.30",
+  "database": "/etc/x-ui/x-ui.db",
+  "substore_url": "http://127.0.0.1:3000",
+  "templates_dir": "/opt/proxy-distribution/templates",
+  "state_dir": "/var/lib/proxy-distribution",
+  "public_dir": "/var/www/proxy-distribution",
+  "web_group": "www",
+  "inbounds": {
+    "dmit-direct": {"name": "DMIT-Native", "udp": false},
+    "dmit-warp": {"name": "DMIT-WARP", "udp": false}
+  }
+}
