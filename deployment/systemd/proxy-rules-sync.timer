@@ -1,0 +1,10 @@
+[Unit]
+Description=Check proxy-rules releases hourly
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target
