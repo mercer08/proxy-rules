@@ -19,7 +19,7 @@
 | Mihomo | [rules.yaml](https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/rules.yaml) | [rules-ads.yaml](https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/rules-ads.yaml) |
 | Shadowrocket | [rules.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/shadowrocket/rules.conf) | [rules-ads.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/shadowrocket/rules-ads.conf) |
 
-上表是原始规则片段。完整个人订阅由 [deployment](deployment/README.md) 生成：公共规则使用
+上表是原始规则片段。完整个人配置由 [deployment](deployment/README.md) 私有生成并仅通过 SSH 导出：公共规则使用
 固定发布标签的 jsDelivr URL，Mihomo 经 DIRECT 下载；业务专项规则仅在允许的个人配置里嵌入。
 GitHub Actions 发布后预热并校验 CDN 公共文件，DMIT 对首次采用的版本再次校验。
 jsDelivr 支持 GitHub 文件自动缓存，但其 Near China 网络不保证所有大陆线路可达。
@@ -136,8 +136,8 @@ shasum -a 256 -c checksums.sha256
 ## 与 DMIT / Sub-Store 串联
 
 已提供可部署的 [DMIT 分发脚本与客户端模板](deployment/README.md)，包含校验镜像、
-只读读取 3x-ui 账号、本机 Sub-Store 转换、个人链接生成、Nginx 下载路径和 systemd 更新任务。
-敏感账号清单和访问令牌在 VPS 私有目录生成，不属于 GitHub 发布产物。
+只读读取 3x-ui 账号、本机 Sub-Store 转换、SSH 离线文件导出和 systemd 更新任务。
+敏感账号与配置在 VPS 私有目录生成，不属于 GitHub 发布产物；Nginx 关闭配置和规则镜像下载。
 
 DMIT 拉取完整版本包并校验 → 解压到新的版本目录 → 校验通过后切换规则镜像目录
 → 客户端模板引用固定版本的 jsDelivr 公共规则，专项规则嵌入允许账号的配置。

@@ -1,110 +1,75 @@
-# DMIT 配置分发
+# DMIT 私有配置与 SSH 导出
 
-本目录接通已有的规则发布、3x-ui 账号和 Sub-Store。适用于当前 Debian 13 VPS：
-VMess + WS 由 Nginx 在 `179.253.248.30:443` 终止 TLS。
+本目录接通规则发布、3x-ui 账号和本机 Sub-Store。完整配置只通过 SSH 导出；
+Nginx 的 `/profiles/`、`/proxy-config/`、`/proxy-rules/` 均返回 404。
+现有 Native WebSocket 代理入口独立保留。
 
 ## 数据流
 
-GitHub Actions 发布不可变标签及 `rules.tar.gz` → jsDelivr 缓存公共规则 →
-DMIT 校验发布包与 CDN 文件 → 只读读取 3x-ui → 本机 Sub-Store 转换节点 → Nginx 分发个人配置。
+GitHub Actions 发布固定标签 → jsDelivr 缓存公共规则 → DMIT 校验发布包与 CDN 文件
+→ 只读读取 3x-ui → 本机 Sub-Store 转换节点 → root 私有目录生成文件 → SSH 导出。
 
-规则文件按内容摘要保存。`rules_delivery: "jsdelivr"` 使公共规则引用
-`https://cdn.jsdelivr.net/gh/mercer08/proxy-rules@rules-<时间>-<摘要>/...`，每个配置固定到同一版本。
-生成前并发下载公共规则并比对发布包 SHA-256；校验失败时保留上一份配置。
-默认工作流在发布后预热和校验公共规则，jsDelivr 无需额外上传凭据。
-jsDelivr 的 Near China 网络不能保证所有大陆线路可达，需在使用者实际网络测试。
+公共规则引用固定发布标签的 jsDelivr URL。生成前下载并校验 SHA-256，失败时保留上一份配置。
+只有 `business_rule_accounts` 允许的账号嵌入业务专项规则；其他账号不包含这些覆盖。
+这不会删除已经公开的 Git 历史或内部域名。
 
-只有允许的账号嵌入业务规则：Surge/Shadowrocket 使用逐条规则，Mihomo 使用 inline provider；
-顺序、DNS 分类和 fake-ip 排除项保持一致。节点和完整配置始终只由 DMIT 私人令牌地址分发。
-该变更不删除公开 Git 历史或原有规则镜像，也不会使原本公开的内部域名变为秘密。
+当前仅映射 `dmit-direct` 为 `DMIT-Native`，数据库以只读方式打开。
+启用、到期和入站关联均在生成时检查；额度仍由 Xray/3x-ui 执行，导出不会重置流量。
 
-缺少 `rules_delivery` 或设置为 `mirror` 可恢复原有 VPS 规则镜像模式。
-上游最新版本每小时检查；账号、规则或模板变化每两分钟检查一次，无变化时不重新生成。
-Surge 托管配置建议每 12 小时刷新，Mihomo 订阅刷新频率在客户端中设置。
-
-只导出 `config.json` 明确映射的入站，外部地址统一使用现有 IP、443 和 TLS。
-当前仅映射 `dmit-direct` → `DMIT-Native`。
-数据库仅以只读模式打开，并核对 3x-ui 3.7 的规范账号表、启用状态、到期时间和入站关联。
-未激活的首次使用到期账号暂不导出。流量额度仍由 Xray/3x-ui 执行。
-
-## 首次部署
+## 部署
 
 需要 root、Python 3.12+、systemd、Nginx；当前实现针对 Linux x86_64。
-首次准备会下载固定版本 Node 24.15.0 和 Sub-Store 2.42.2，分别校验官方校验和及 GitHub asset digest。
-Node 保存在 `/opt/proxy-distribution`，不会覆盖系统运行时。Sub-Store 使用独立系统账号，监听 `127.0.0.1:3000`。
+准备程序下载固定版本 Node 和 Sub-Store 并校验官方摘要，Sub-Store 监听 `127.0.0.1:3000`。
 
-将整个 `deployment` 目录复制到 VPS 后，在该目录执行：
+复制 deployment 目录后执行：
 
 ```bash
 python3 install.py prepare
-```
-
-检查 `/etc/proxy-distribution/config.json` 的地址、入站 tag、数据库路径和 Nginx worker group。
-原始 VMess 端口和 WS 路径由面板数据读取，节点凭据无需手工复制到仓库。
-
-生成并检查配置：
-
-```bash
 python3 /opt/proxy-distribution/distribute.py rules
 python3 /opt/proxy-distribution/distribute.py profiles
+python3 /opt/proxy-distribution/install.py publish --nginx-site /path/to/vps-site.conf
 ```
 
-完成检查后公开下载路径：
+检查 `/etc/proxy-distribution/config.json` 的地址、入站 tag 和数据库路径。
+节点凭据由面板读取，不应复制到仓库。`account_labels` 和业务账号名单也只放在 VPS 私有配置里。
+`publish` 安装禁止 HTTP 下载的 Nginx include 和更新任务；通过 `nginx -t` 后 reload。
+从旧版本迁移还应把旧公网目录移入私有备份、收回读取权限，并停用旧访问令牌。
+
+## 下载与导入
+
+在自己的电脑运行，标准输出是压缩包，日志写入标准错误：
 
 ```bash
-python3 /opt/proxy-distribution/install.py publish \
-  --nginx-site /www/server/panel/vhost/nginx/179.253.248.30.conf
+umask 077
+ssh root@VPS_IP 'python3 /opt/proxy-distribution/distribute.py export' > all-accounts.tar.gz
+ssh root@VPS_IP 'python3 /opt/proxy-distribution/distribute.py export --account mac' > mac.tar.gz
 ```
 
-安装程序备份原有 Nginx 配置，仅向唯一的 443 TLS server 添加 include；`nginx -t` 通过后 reload。
-测试失败会恢复原文件。证书申请配置和现有 WS 路由继续由原站点维护。
+`--account` 使用当前账号的完整显示名；未知或重复名称会拒绝导出。
+使用 1Password SSH agent 时，可沿用已授权的持久 SSH 连接。
+每个账号有独立目录，只分享对应人的目录或压缩包。
 
-## 获取链接
-
-个人链接清单位于 `/var/lib/proxy-distribution/subscriptions.md`，权限 0600。
-每个账号使用独立的 48 位十六进制访问令牌，与 3x-ui 的 subId 不同。
-文件中的节点 UUID、原始订阅身份和令牌仅存于 VPS，不能提交到 GitHub。
-
-私人显示名称可在 VPS 的 `config.json` 中用 `account_labels` 对象设置：键为 3x-ui
-账号 email，值为订阅清单显示名。修改后生成 profiles 即可；不会改变面板账号标识、
-节点 UUID 或下载令牌。真实姓名和名称映射也不应提交到公开仓库。
-
-`business_rule_accounts` 是允许使用 `lan-com`、`wan-com`、`futu-broker` 专项规则的
-3x-ui 账号 email 列表，默认空列表。只有明确列出的账号加入这些规则；其他账号的
-Surge/Shadowrocket 路由、Mihomo provider、DNS 分类及 fake-ip 排除项均不包含这些专项覆盖。
-普通公共域名列表仍按原样应用，不从中删除 MEXC 或券商的公共域名。
-
-| 客户端 | 导入方式 |
+| 客户端 | 离线导入方式 |
 | --- | --- |
-| Surge | 对应账号的 `surge.conf` 托管配置链接 |
-| Mihomo | 对应账号的 `mihomo.yaml` 远程配置链接 |
-| Shadowrocket | 对应账号的 `shadowrocket.txt` 节点订阅，并在配置页添加、启用同账号的 `shadowrocket.conf` |
+| Surge | 导入本地 `surge.conf` |
+| Clash / Mihomo | 导入本地 `mihomo.yaml`，客户端需支持 Mihomo 配置 |
+| Shadowrocket | 复制 `node.txt` 的 vmess URI 导入节点，再导入并启用本地 `shadowrocket.conf` |
 
-Shadowrocket 每个账号都有自己的分流配置，规则范围与 Surge/Mihomo 一致。
-旧共用地址 `https://179.253.248.30/proxy-config/shadowrocket.conf` 保留为不含业务专项规则的基础配置。
-其策略组仅选择名称为 `DMIT-Native` 的节点。
-没有增加代理失败后自动直连的策略。
+`shadowrocket.txt` 另提供 Base64 节点订阅格式，供支持该格式的导入工具使用。
+导出的完整配置没有托管配置地址或自动更新地址，公共规则文件仍从 jsDelivr 下载。
 
-Nginx 仅开放限定格式的配置和规则路径；不转发 Sub-Store 的管理 API。
-个人配置禁止缓存，相关 access/error 日志关闭，文件只允许 root 和 Nginx worker group 读取。
-如需要使用官方 Sub-Store 前端管理，可通过 SSH 本地端口转发访问 `127.0.0.1:3000`，不要公开该裸后端。
+文件清单位于 `/var/lib/proxy-distribution/subscriptions.md`；
+当前文件位于 `/var/lib/proxy-distribution/profiles/current`。
+目录为 0700、文件为 0600，仅 root 可读，Nginx worker 无权读取。
 
-## DNS 与 UDP
+SSH 限制的是服务器下载渠道。分享出的文件包含节点凭据，收到文件的人仍能复制和二次分享。
+需要撤销使用权时在 3x-ui 禁用账号；轮换 UUID 后，需要重新导出并导入文件。
 
-- Surge 使用系统 DNS 处理直连请求，代理域名通常由代理服务器解析。
-- Mihomo 使用 fake-ip；DNS 规则沿用路由规则顺序。局域网和 `lan-com` 使用系统 DNS，
-  直连域名使用国内 DoH，代理域名通过 `PROXY` 使用 DoH。局域网及内部域名排除 fake-ip。
-- Shadowrocket 使用系统 DNS 和直连系统解析；代理 DNS 行为需在实际设备上验证。
-- 当前 Xray 阻断全部代理 UDP，因此映射节点的 `udp` 为 false。Surge 和 Shadowrocket 模板阻断代理 QUIC，
-  避免将不支持的流量自动直连。保留直连网络的 QUIC 行为。
-- 分发部署不会修改 Xray 的 UDP 路由。确认服务器与客户端支持后，可单独开启 Native 的 UDP。
-- 普通 HTTP 系统代理不能捕获全部应用流量；需要时在对应客户端开启 VPN/TUN/增强模式。
+## 更新与维护
 
-所有配置保持 TLS 证书验证。IP 证书的续期由既有证书管理流程执行。
-Surge/Shadowrocket 缺少 Linux 原生验证器，首次导入必须在实际客户端验证。
-Mihomo 配置可用其官方核心执行 `mihomo -t -d <目录> -f <配置>`。
-
-## 维护与回滚
+Actions 在北京时间每天 08:17、main 更新和手动触发时发布规则。
+VPS 每小时检查规则版本、每两分钟检查私有配置变化。新固定版本需要重新通过 SSH
+下载完整配置并导入，离线配置不会自动切换到新版本。
 
 ```bash
 systemctl status sub-store proxy-rules-sync.timer proxy-profiles-sync.timer
@@ -113,13 +78,21 @@ systemctl start proxy-rules-sync
 systemctl start proxy-profiles-sync
 ```
 
-`/var/lib/proxy-distribution/rules.json` 记录已镜像版本；`profiles.json` 记录当前账号链接。
-`tokens.json` 用于保持访问令牌稳定，备份时与 3x-ui 数据库一样作为敏感数据保存。
-停用、到期或移除账号关联后，下一次成功同步移除下载配置；面板禁用立即影响实际连接。
+`rules.json` 记录已校验版本，`profiles.json` 记录私有文件路径，不保存公网下载链接。
+禁用或到期账号在下一次成功同步后不再导出，实际连接限制仍由面板执行。
 
-旧规则版本和配置 generation 保留用于回滚，不通过任何目录索引公开。
-如需回滚个人配置，可将 `/var/www/proxy-distribution/profiles/current` 原子切换到前一 generation，
-并先暂停 `proxy-profiles-sync.timer`。旧 generation 含凭据，应限制访问并定期按实际保留需求清理。
+修改脚本或模板后复制到 `/opt/proxy-distribution` 并执行 profiles。
+Sub-Store 升级需要另行核对官方版本，规则同步不会升级程序。
+规则、配置 generation 和备份均位于私有状态目录，含凭据的备份需限制权限并加密保存。
+回滚可暂停 profiles timer 后切换私有 `profiles/current`，不要恢复 HTTP 下载入口。
 
-修改代码或模板后重新复制到 `/opt/proxy-distribution`，手动执行 profiles 即可；
-Sub-Store 的版本升级需要单独核对官方发布，规则同步不会自动升级程序。
+## 客户端行为与验证
+
+Surge 使用系统 DNS；Mihomo 使用 fake-ip，沿用分流顺序配置 DNS，内部域名排除 fake-ip。
+Shadowrocket DNS 和 Surge/Shadowrocket 导入需在实际设备验证。
+当前代理 UDP 被阻断，节点 udp 为 false；模板阻断代理 QUIC，保留直连 QUIC。
+本部署不修改 IPv6，所有节点保留 TLS 证书验证。
+
+Mihomo 可用官方核心执行 `mihomo -t -d <目录> -f <配置>`。
+jsDelivr 可达性需要在实际网络测试，无法保证所有大陆线路。
+普通 HTTP 系统代理不能接管全部应用流量，需要时在客户端启用 VPN/TUN。
