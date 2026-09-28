@@ -123,6 +123,7 @@ function renderAccounts() {
 async function selectAccount(account) {
   if (state.loading || !confirmDiscard()) return;
   state.account = account; $('breadcrumb-account').textContent = account.label; $('account-title').textContent = account.label;
+  $('node-names').textContent = account.nodes.join(' · ');
   $('account-subtitle').textContent = '完整配置尽在此处。选客户端，编辑后保存，或直接下载。';
   $('rules-scope').lastChild.textContent = account.businessRules ? '公共规则 + 个人专项规则' : '公共分流规则';
   renderAccounts(); await loadFile();
