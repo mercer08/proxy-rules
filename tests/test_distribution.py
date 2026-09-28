@@ -8,6 +8,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import yaml
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,19 +30,6 @@ def archive(files):
 
 
 class DistributionTests(unittest.TestCase):
-    def test_proxy_quic_block_preserves_direct_and_rule_order(self):
-        fragment = 'rules:\n  - "DOMAIN-SUFFIX,cn,DIRECT"\n  - "RULE-SET,proxy,PROXY"\n  - "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve"\n  - "MATCH,PROXY"\n'
-        result = d.block_mihomo_proxy_quic(fragment)
-        rules = [json.loads(line.strip()[2:]) for line in result.splitlines() if line.startswith('  - ')]
-        self.assertEqual(rules, [
-            'DOMAIN-SUFFIX,cn,DIRECT',
-            'AND,((NETWORK,UDP),(DST-PORT,443),(RULE-SET,proxy)),REJECT',
-            'RULE-SET,proxy,PROXY',
-            'IP-CIDR,10.0.0.0/8,DIRECT,no-resolve',
-            'AND,((NETWORK,UDP),(DST-PORT,443)),REJECT',
-            'MATCH,PROXY',
-        ])
-
     def bundle(self):
         files = {"surge/rules.conf": b"[Rule]\nFINAL,PROXY\n",
                  "mihomo/rules.yaml": b"rules:\n - MATCH,PROXY\n",
@@ -258,10 +246,15 @@ rules:
             rendered = d.render_profiles(config, {}, converted, "a" * 48, root, "b" * 64)
             self.assertIn("ws-headers=Host:203.0.113.1,vmess-aead=true", rendered["surge.conf"])
             self.assertNotIn('Host:"', rendered["surge.conf"])
-            dns_line = next(line for line in rendered["mihomo.yaml"].splitlines() if line.startswith('"dns":'))
-            dns = json.loads(dns_line.split(": ", 1)[1])
+            mihomo = yaml.safe_load(rendered["mihomo.yaml"])
+            dns = mihomo["dns"]
             self.assertEqual(list(dns["nameserver-policy"]), ["rule-set:proxy", "rule-set:direct"])
             self.assertTrue(dns["nameserver-policy"]["rule-set:proxy"][0].endswith("#PROXY"))
+            self.assertEqual(mihomo["rules"], ["RULE-SET,proxy,PROXY", "RULE-SET,direct,DIRECT", "MATCH,PROXY"])
+            self.assertEqual(mihomo["proxies"], [node])
+            self.assertIn("block-quic = always-allow", rendered["surge.conf"])
+            self.assertNotIn("block-quic=on", rendered["surge.conf"])
+            self.assertIn("block-quic = always-allow", rendered["shadowrocket.conf"])
 
     def test_business_rules_are_account_scoped_in_all_clients_and_dns(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -295,9 +288,11 @@ rules:
                         self.assertEqual(name in rendered[filename], enabled, filename + ": " + name)
                     self.assertIn("private", rendered[filename])
                     self.assertIn("PROXY", rendered[filename])
-                dns = json.loads(next(line.split(": ", 1)[1] for line in rendered["mihomo.yaml"].splitlines() if line.startswith('"dns":')))
-                self.assertEqual("+.internal.business.test" in dns["fake-ip-filter"], enabled)
-                self.assertIn("+.localnet.test", dns["fake-ip-filter"])
+                mihomo = yaml.safe_load(rendered["mihomo.yaml"])
+                dns = mihomo["dns"]
+                self.assertEqual("rule-set:lan-com" in dns["fake-ip-filter"], enabled)
+                self.assertEqual(dns["fake-ip-filter"], ["rule-set:private"] + (["rule-set:lan-com"] if enabled else []))
+                self.assertFalse(any('REJECT' in rule for rule in mihomo["rules"]))
                 self.assertNotIn("update-url", rendered["shadowrocket.conf"])
                 self.assertNotIn("#!MANAGED-CONFIG", rendered["surge.conf"])
                 self.assertNotIn("/profiles/", rendered["surge.conf"])
@@ -318,9 +313,9 @@ rules:
                     for filename in ("surge.conf", "shadowrocket.conf"):
                         self.assertIn("IP-CIDR,203.0.113.0/24,PROXY,no-resolve", rendered[filename])
                         self.assertLess(rendered[filename].index("internal.business.test"), rendered[filename].index("/proxy.list"))
-                dns = json.loads(next(line.split(": ", 1)[1] for line in rendered["mihomo.yaml"].splitlines() if line.startswith('"dns":')))
+                dns = yaml.safe_load(rendered["mihomo.yaml"])["dns"]
                 self.assertEqual("rule-set:lan-com" in dns["nameserver-policy"], enabled)
-                self.assertEqual("+.internal.business.test" in dns["fake-ip-filter"], enabled)
+                self.assertEqual("rule-set:lan-com" in dns["fake-ip-filter"], enabled)
 
 
 if __name__ == "__main__":

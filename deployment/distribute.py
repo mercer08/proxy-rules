@@ -375,21 +375,20 @@ def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=F
     return text + fragment
 
 
-def block_mihomo_proxy_quic(fragment):
-    """Reject UDP/443 at each proxy rule, preserving earlier direct rules."""
+def yaml_block(value, indent=0):
+    """Emit the JSON-compatible profile data as readable block YAML."""
+    pad = " " * indent
     lines = []
-    for line in fragment.splitlines():
-        if line.startswith('  - "'):
-            rule = json.loads(line.strip()[2:])
-            parts = rule.split(',')
-            if len(parts) >= 2 and parts[-1] == "PROXY":
-                match = ','.join(parts[:-1])
-                conditions = '(NETWORK,UDP),(DST-PORT,443)'
-                if match != "MATCH":
-                    conditions += ',(' + match + ')'
-                lines.append('  - ' + json.dumps('AND,(' + conditions + '),REJECT'))
-        lines.append(line)
-    return '\n'.join(lines) + '\n'
+    items = value.items() if isinstance(value, dict) else ((None, item) for item in value)
+    for key, child in items:
+        label = "-" if key is None else (
+            key if re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_-]*", key) else json.dumps(key)) + ":"
+        if isinstance(child, (dict, list)) and child:
+            lines.append(pad + label)
+            lines.extend(yaml_block(child, indent + 2))
+        else:
+            lines.append(pad + label + " " + json.dumps(child, ensure_ascii=False))
+    return lines
 
 
 def render_profiles(config, account, converted, token, rules_dir, digest):
@@ -400,11 +399,10 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
     surge_lines = [line for line in converted["Surge"].splitlines() if line.strip() and not line.startswith("#")]
     if len(surge_lines) != len(proxies) or any(not line.startswith(name + " =") and not line.startswith(name + "=") for name, line in zip(names, surge_lines)):
         raise ValueError("Unexpected Surge proxy export")
-    # Policy options are distinct from VMess UDP capability.
     # Sub-Store 2.42.2 double-quotes a quoted Host value in its Surge exporter.
     # We only generate a single IP Host header, whose unquoted form is valid.
     surge_lines = [re.sub(r',ws-headers=.*?(?=,vmess-aead=|,tls=|$)',
-                         ',ws-headers=Host:' + config["server"], line) + ", block-quic=on"
+                         ',ws-headers=Host:' + config["server"], line)
                    for line in surge_lines]
     common = {"PROXY_NAMES": ", ".join(names), "ORIGIN": origin}
     surge = string.Template((templates / "surge.conf").read_text()).substitute(
@@ -437,21 +435,15 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
             resolver = ["rcode://refused"]
         dns_policy["rule-set:" + name] = resolver
     mihomo_base["dns"]["nameserver-policy"] = dns_policy
-    filters = mihomo_base["dns"]["fake-ip-filter"]
+    # Reuse the same account-scoped providers used by routing and DNS policy.
+    # Do not inline a second copy of private/PTR domains into every profile.
+    filters = list(mihomo_base["dns"]["fake-ip-filter"])
     for name in ("private", "lan-com"):
-        if name == "lan-com" and not business_rules:
-            continue
-        source = rules_dir / "surge" / (name + ".list")
-        if source.exists():
-            for line in source.read_text().splitlines():
-                parts = line.split(',')
-                if len(parts) == 2 and parts[0] in ("DOMAIN", "DOMAIN-SUFFIX"):
-                    filters.append(("+." if parts[0] == "DOMAIN-SUFFIX" else "") + parts[1])
-    # JSON is a YAML-compatible mapping; writing each top-level JSON value also
-    # allows the already-validated YAML rule fragment to be appended unchanged.
-    mihomo = "\n".join(json.dumps(key) + ": " + json.dumps(value, ensure_ascii=False) for key, value in mihomo_base.items()) + "\n"
+        if behaviors.get(name) in ("domain", "classical") and (name != "lan-com" or business_rules):
+            filters.append("rule-set:" + name)
+    mihomo_base["dns"]["fake-ip-filter"] = list(dict.fromkeys(filters))
+    mihomo = "\n".join(yaml_block(mihomo_base)) + "\n"
     fragment = fragment.replace("    proxy: PROXY", "    proxy: DIRECT")
-    fragment = block_mihomo_proxy_quic(fragment)
     mihomo += fragment
     uri = converted["URI"].strip()
     if not uri.startswith("vmess://"):
