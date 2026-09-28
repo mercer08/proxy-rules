@@ -55,6 +55,10 @@ python3 /opt/proxy-distribution/install.py publish \
 每个账号使用独立的 48 位十六进制访问令牌，与 3x-ui 的 subId 不同。
 文件中的节点 UUID、原始订阅身份和令牌仅存于 VPS，不能提交到 GitHub。
 
+私人显示名称可在 VPS 的 `config.json` 中用 `account_labels` 对象设置：键为 3x-ui
+账号 email，值为订阅清单显示名。修改后生成 profiles 即可；不会改变面板账号标识、
+节点 UUID 或下载令牌。真实姓名和名称映射也不应提交到公开仓库。
+
 | 客户端 | 导入方式 |
 | --- | --- |
 | Surge | 对应账号的 `surge.conf` 托管配置链接 |

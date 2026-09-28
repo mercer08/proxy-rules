@@ -193,7 +193,9 @@ def load_accounts(config, now=None):
                 account_id = client.get("subId")
                 if not account_id or not client.get("id"):
                     raise ValueError("Client is missing subscription identity")
-                account = accounts.setdefault(account_id, {"label": client.get("email", "account"), "nodes": [], "expiry": expiry})
+                email = client.get("email", "account")
+                label = config.get("account_labels", {}).get(email, email)
+                account = accounts.setdefault(account_id, {"label": label, "nodes": [], "expiry": expiry})
                 node = {"name": mapping["name"], "type": "vmess", "server": config["server"],
                         "port": config["port"], "uuid": client["id"], "alterId": 0,
                         "cipher": "aes-128-gcm", "tls": True, "skip-cert-verify": False,
