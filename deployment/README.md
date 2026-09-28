@@ -5,10 +5,20 @@ VMess + WS 由 Nginx 在 `179.253.248.30:443` 终止 TLS。
 
 ## 数据流
 
-GitHub Actions 发布 `rules.tar.gz` → DMIT 校验并镜像版本文件 →
-只读读取 3x-ui → 在本机 Sub-Store 转换节点 → 拼装客户端模板 → Nginx 分发。
+GitHub Actions 发布不可变标签及 `rules.tar.gz` → jsDelivr 缓存公共规则 →
+DMIT 校验发布包与 CDN 文件 → 只读读取 3x-ui → 本机 Sub-Store 转换节点 → Nginx 分发个人配置。
 
-规则文件按内容摘要保存，个人配置引用同一份不可变快照。拉取、校验或转换失败时保留上一份配置。
+规则文件按内容摘要保存。`rules_delivery: "jsdelivr"` 使公共规则引用
+`https://cdn.jsdelivr.net/gh/mercer08/proxy-rules@rules-<时间>-<摘要>/...`，每个配置固定到同一版本。
+生成前并发下载公共规则并比对发布包 SHA-256；校验失败时保留上一份配置。
+默认工作流在发布后预热和校验公共规则，jsDelivr 无需额外上传凭据。
+jsDelivr 的 Near China 网络不能保证所有大陆线路可达，需在使用者实际网络测试。
+
+只有允许的账号嵌入业务规则：Surge/Shadowrocket 使用逐条规则，Mihomo 使用 inline provider；
+顺序、DNS 分类和 fake-ip 排除项保持一致。节点和完整配置始终只由 DMIT 私人令牌地址分发。
+该变更不删除公开 Git 历史或原有规则镜像，也不会使原本公开的内部域名变为秘密。
+
+缺少 `rules_delivery` 或设置为 `mirror` 可恢复原有 VPS 规则镜像模式。
 上游最新版本每小时检查；账号、规则或模板变化每两分钟检查一次，无变化时不重新生成。
 Surge 托管配置建议每 12 小时刷新，Mihomo 订阅刷新频率在客户端中设置。
 

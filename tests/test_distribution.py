@@ -8,6 +8,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("distribution", ROOT / "deployment/distribute.py")
@@ -111,6 +112,40 @@ class DistributionTests(unittest.TestCase):
         self.assertNotIn("githubusercontent", output)
         self.assertIn("/proxy-rules/" + "a" * 64 + "/surge/wan-com.list,PROXY", output)
 
+    def test_cdn_urls_require_a_matching_immutable_tag(self):
+        config = {"repository": "mercer08/proxy-rules", "rules_delivery": "jsdelivr",
+                  "_rules_tag": "rules-20260928T010000Z-" + "a" * 10}
+        source = "DOMAIN-SET,https://raw.githubusercontent.com/mercer08/proxy-rules/release/surge/private.domainset,DIRECT"
+        self.assertIn("cdn.jsdelivr.net/gh/mercer08/proxy-rules@" + config["_rules_tag"], d.rewrite_rules(source, config, "a" * 64))
+        for tag in ("release", "main", "rules-20260928T010000Z-" + "b" * 10):
+            with self.assertRaises(ValueError):
+                d.rewrite_rules(source, dict(config, _rules_tag=tag), "a" * 64)
+
+    def test_cdn_verification_rejects_tampering_and_never_fetches_business_rules(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            raw = "https://raw.githubusercontent.com/mercer08/proxy-rules/release/"
+            hashes = {}
+            for client in ("surge", "shadowrocket", "mihomo"):
+                (root / client).mkdir()
+                if client == "mihomo":
+                    fragment = 'rule-providers:\n  private:\n    type: http\n    url: "' + raw + 'mihomo/private.yaml"\n  lan-com:\n    type: http\n    url: "' + raw + 'mihomo/lan-com.yaml"\nrules:\n  - "RULE-SET,private,DIRECT"\n  - "RULE-SET,lan-com,DIRECT"\n'
+                    filename = "rules.yaml"
+                    rulefile = "private.yaml"
+                else:
+                    fragment = "[Rule]\nRULE-SET," + raw + client + "/private.list,DIRECT\nRULE-SET," + raw + client + "/lan-com.list,DIRECT\nFINAL,PROXY\n"
+                    filename = "rules.conf"
+                    rulefile = "private.list"
+                (root / client / filename).write_text(fragment)
+                hashes[client + "/" + rulefile] = hashlib.sha256(b"public-rules").hexdigest()
+            (root / "manifest.json").write_text(json.dumps({"sha256": hashes}))
+            config = {"repository": "mercer08/proxy-rules", "rules_delivery": "jsdelivr", "_rules_tag": "rules-now-" + "a" * 10}
+            with patch.object(d, "fetch", return_value=b"public-rules") as download:
+                self.assertEqual(d.verify_cdn(config, root, "a" * 64), 3)
+                self.assertTrue(all("lan-com" not in call.args[0] for call in download.call_args_list))
+            with patch.object(d, "fetch", return_value=b"tampered"), self.assertRaises(ValueError):
+                d.verify_cdn(config, root, "a" * 64)
+
     def test_nginx_include_is_added_to_tls_server_only_and_is_idempotent(self):
         text = '''# A comment with { }
 server { listen 80; location / { return 404; } }
@@ -173,7 +208,12 @@ rules:
                 (root / client / "rules.conf").write_text("\n".join(lines) + "\nFINAL,PROXY\n")
             (root / "surge/private.list").write_text("DOMAIN-SUFFIX,localnet.test\n")
             (root / "surge/lan-com.list").write_text("DOMAIN-SUFFIX,internal.business.test\n")
-            providers = "rule-providers:\n" + "".join("  " + name + ":\n    type: http\n    behavior: classical\n" for name in names)
+            for client in ("surge", "shadowrocket", "mihomo"):
+                for name in d.BUSINESS_RULE_SETS:
+                    rule = "DOMAIN-SUFFIX,internal.business.test" if name == "lan-com" else "IP-CIDR,203.0.113.0/24,no-resolve"
+                    content = 'payload:\n  - ' + json.dumps(rule) + '\n' if client == "mihomo" else rule + '\n'
+                    (root / client / (name + (".yaml" if client == "mihomo" else ".list"))).write_text(content)
+            providers = "rule-providers:\n" + "".join("  " + name + ":\n    type: http\n    behavior: classical\n    url: " + json.dumps(origin + "mihomo/" + name + ".yaml") + "\n" for name in names)
             rules = "rules:\n" + "".join('  - "RULE-SET,' + name + ',' +
                 ("DIRECT" if name in ("private", "lan-com") else "PROXY") + '"\n' for name in names)
             (root / "mihomo/rules.yaml").write_text(providers + rules + '  - "MATCH,PROXY"\n')
@@ -193,6 +233,23 @@ rules:
                 self.assertIn("/profiles/" + "a" * 48 + "/shadowrocket.conf", rendered["shadowrocket.conf"])
             shared = d.render_shadowrocket(config, root, "b" * 64, "https://203.0.113.1/proxy-config/shadowrocket.conf")
             self.assertTrue(all(name not in shared for name in d.BUSINESS_RULE_SETS))
+            cdn_config = dict(config, rules_delivery="jsdelivr", _rules_tag="rules-now-" + "b" * 10)
+            for enabled in (False, True):
+                rendered = d.render_profiles(cdn_config, {"business_rules": enabled}, converted, "a" * 48, root, "b" * 64)
+                for filename in ("surge.conf", "mihomo.yaml", "shadowrocket.conf"):
+                    self.assertNotIn("/proxy-rules/", rendered[filename])
+                    self.assertNotIn("githubusercontent", rendered[filename])
+                    self.assertIn("cdn.jsdelivr.net/gh/", rendered[filename])
+                    for name in d.BUSINESS_RULE_SETS:
+                        self.assertNotIn("/" + name + ".", rendered[filename])
+                if enabled:
+                    self.assertIn("type: inline", rendered["mihomo.yaml"])
+                    for filename in ("surge.conf", "shadowrocket.conf"):
+                        self.assertIn("IP-CIDR,203.0.113.0/24,PROXY,no-resolve", rendered[filename])
+                        self.assertLess(rendered[filename].index("internal.business.test"), rendered[filename].index("/proxy.list"))
+                dns = json.loads(next(line.split(": ", 1)[1] for line in rendered["mihomo.yaml"].splitlines() if line.startswith('"dns":')))
+                self.assertEqual("rule-set:lan-com" in dns["nameserver-policy"], enabled)
+                self.assertEqual("+.internal.business.test" in dns["fake-ip-filter"], enabled)
 
 
 if __name__ == "__main__":

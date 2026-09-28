@@ -68,3 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/publish.py --source "$RUNNER_TEMP/rules" --repository "$GITHUB_REPOSITORY"
+      - name: Warm and verify public rules on jsDelivr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/check_cdn.py --source "$RUNNER_TEMP/rules" --repository "$GITHUB_REPOSITORY"
