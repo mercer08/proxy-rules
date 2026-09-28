@@ -122,7 +122,9 @@ Sub-Store 升级需要另行核对官方版本，规则同步不会升级程序�
 
 Surge 使用系统 DNS；Mihomo 使用 fake-ip，沿用分流顺序配置 DNS，内部域名排除 fake-ip。
 Shadowrocket DNS 和 Surge/Shadowrocket 导入需在实际设备验证。
-当前代理 UDP 被阻断，节点 udp 为 false；模板阻断代理 QUIC，保留直连 QUIC。
+普通代理 UDP 开启，节点 udp 为 true；Surge/Shadowrocket 阻断代理 QUIC，
+Mihomo 在每条 PROXY 规则之前拒绝该规则匹配的 UDP/443，保留原分流顺序与直连 QUIC。
+服务器 Xray 同时拒绝代理 UDP/443 和嗅探到的 QUIC，其余 UDP 按原有路由转发。
 本部署不修改 IPv6，所有节点保留 TLS 证书验证。
 
 Mihomo 可用官方核心执行 `mihomo -t -d <目录> -f <配置>`。
