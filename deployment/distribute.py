@@ -2,6 +2,7 @@
 """Mirror validated rule releases and privately render 3x-ui subscriptions."""
 import argparse
 import base64
+import contextlib
 from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import hashlib
@@ -10,10 +11,10 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
-import secrets
 import shutil
 import sqlite3
 import string
+import sys
 import tarfile
 import tempfile
 import time
@@ -134,8 +135,9 @@ def mirror(config):
     checksum = fetch(urls["rules.tar.gz.sha256"], limit=1024).decode().split()[0]
     if not re.fullmatch(r"[a-f0-9]{64}", checksum):
         raise ValueError("Invalid archive checksum")
-    releases = Path(config["public_dir"]) / "rules/releases"
-    releases.mkdir(parents=True, exist_ok=True)
+    (state / "rules").mkdir(mode=0o700, exist_ok=True)
+    releases = state / "rules/releases"
+    releases.mkdir(mode=0o700, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".staging-", dir=releases) as temporary:
         staging = Path(temporary)
         manifest = unpack_verified(fetch(urls["rules.tar.gz"]), checksum, staging)
@@ -143,8 +145,8 @@ def mirror(config):
         destination = releases / version
         if not destination.exists():
             for path in staging.rglob("*"):
-                os.chmod(path, 0o755 if path.is_dir() else 0o644)
-            os.chmod(staging, 0o755)
+                os.chmod(path, 0o700 if path.is_dir() else 0o600)
+            os.chmod(staging, 0o700)
             os.rename(staging, destination)
             # TemporaryDirectory must still find its original path on exit.
             staging.mkdir()
@@ -344,7 +346,8 @@ def select_rules(fragment, client, business_rules=False):
 
 def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=False):
     template = Path(config["templates_dir"]) / "shadowrocket.conf"
-    text = string.Template(template.read_text()).substitute(MANAGED_URL=managed_url)
+    text = string.Template(template.read_text()).substitute(MANAGED_URL="")
+    text = re.sub(r"(?m)^update-url\s*=.*\n?", "", text)
     fragment = prepare_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", config, rules_dir, digest, business_rules)
     return text + fragment
 
@@ -365,7 +368,8 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
                    for line in surge_lines]
     common = {"PROXY_NAMES": ", ".join(names), "ORIGIN": origin}
     surge = string.Template((templates / "surge.conf").read_text()).substitute(
-        common, MANAGED_URL=origin + "/profiles/" + token + "/surge.conf", PROXIES="\n".join(surge_lines))
+        common, MANAGED_URL="", PROXIES="\n".join(surge_lines))
+    surge = re.sub(r"(?m)^#!MANAGED-CONFIG.*\n?", "", surge)
     business_rules = bool(account.get("business_rules", False))
     surge += prepare_rules((rules_dir / "surge/rules.conf").read_text(), "surge", config, rules_dir, digest, business_rules)
     mihomo_base = json.loads((templates / "mihomo.json").read_text())
@@ -419,6 +423,7 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
         raise ValueError("Unexpected URI node list")
     return {"surge.conf": surge, "mihomo.yaml": mihomo,
             "shadowrocket.txt": base64.b64encode(("\n".join(uris) + "\n").encode()).decode() + "\n",
+            "node.txt": "\n".join(uris) + "\n",
             "shadowrocket.conf": render_shadowrocket(
                 config, rules_dir, digest, origin + "/profiles/" + token + "/shadowrocket.conf", business_rules)}
 
@@ -428,8 +433,7 @@ def generate(config):
     rule_state = json.loads((state / "rules.json").read_text())
     digest = rule_state["digest"]
     config = dict(config, _rules_tag=rule_state["tag"])
-    public = Path(config["public_dir"])
-    rules_dir = public / "rules/releases" / digest
+    rules_dir = state / "rules/releases" / digest
     accounts = load_accounts(config)
     template_files = sorted(Path(config["templates_dir"]).glob("*"))
     template_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in template_files if p.is_file()}
@@ -446,52 +450,43 @@ def generate(config):
             count = verify_cdn(config, rules_dir, digest)
             atomic_write(cdn_state, json.dumps(expected) + "\n")
             print("Public CDN rules verified: " + str(count))
-    token_file = state / "tokens.json"
-    tokens = json.loads(token_file.read_text()) if token_file.exists() else {}
-    for account in accounts:
-        tokens.setdefault(account, secrets.token_hex(24))
-    atomic_write(token_file, json.dumps(tokens, sort_keys=True) + "\n")
-    generations = public / "profiles/generations"
-    generations.mkdir(parents=True, exist_ok=True)
+    profiles_root = state / "profiles"
+    profiles_root.mkdir(mode=0o700, exist_ok=True)
+    generations = profiles_root / "generations"
+    generations.mkdir(mode=0o700, exist_ok=True)
     records = []
     staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=generations))
     try:
         for account_key, account in accounts.items():
-            token = tokens[account_key]
-            if not re.fullmatch(r"[a-f0-9]{48}", token):
-                raise ValueError("Invalid saved download token")
+            # This is a private filesystem identifier, never an HTTP credential.
+            folder = hashlib.sha256(account_key.encode()).hexdigest()[:24]
             converted = substore(config, account_key, account["nodes"])
-            profiles = render_profiles(config, account, converted, token, rules_dir, digest)
-            directory = staging / token
+            profiles = render_profiles(config, account, converted, "", rules_dir, digest)
+            directory = staging / folder
             directory.mkdir()
             for name, content in profiles.items():
                 (directory / name).write_text(content)
-            origin = config["public_url"].rstrip("/")
             records.append({"label": account["label"], "business_rules": account["business_rules"],
                             "nodes": [n["name"] for n in account["nodes"]],
-                            "links": {name: origin + "/profiles/" + token + "/" + name for name in profiles}})
+                            "files": {name: str(profiles_root / "current" / folder / name) for name in profiles}})
         shared = staging / "shared"
         shared.mkdir()
         shadowrocket = render_shadowrocket(config, rules_dir, digest,
                                            config["public_url"].rstrip("/") + "/proxy-config/shadowrocket.conf")
         (shared / "shadowrocket.conf").write_text(shadowrocket)
-        # nginx's worker group is configured explicitly; credentials are never world-readable.
-        group = config["web_group"]
-        shutil.chown(staging, group=group)
-        os.chmod(staging, 0o750)
+        os.chmod(staging, 0o700)
         for path in staging.rglob("*"):
-            shutil.chown(path, group=group)
-            os.chmod(path, 0o750 if path.is_dir() else 0o640)
+            os.chmod(path, 0o700 if path.is_dir() else 0o600)
         destination = generations / (str(time.time_ns()) + "-" + fingerprint[:12])
         os.rename(staging, destination)
-        switch_link(public / "profiles/current", destination)
+        switch_link(profiles_root / "current", destination)
         atomic_write(current, json.dumps({"fingerprint": fingerprint, "rules": digest, "accounts": records}, ensure_ascii=False, indent=2) + "\n")
-        lines = ["# DMIT 订阅链接", "", "此文件包含个人访问令牌，请仅将对应账号的链接交给本人。", "",
-                 "Shadowrocket：添加对应账号的 shadowrocket.txt 节点订阅，并启用该账号的 shadowrocket.conf 分流配置。", "",
-                 "共用基础分流配置（不含业务规则）：" + config["public_url"].rstrip("/") + "/proxy-config/shadowrocket.conf", ""]
+        lines = ["# DMIT SSH 配置文件", "", "仅通过 SSH 下载配置；公网下载入口已关闭。", "",
+                 "Surge/Mihomo 导入本地配置文件。Shadowrocket 先复制 node.txt 的 vmess 地址导入节点，再导入 shadowrocket.conf。", "",
+                 "完整配置没有自动更新 URL。规则更新后需重新 SSH 导出完整配置。", ""]
         for record in records:
             lines.extend(["## " + record["label"], ""])
-            lines.extend("- " + name + ": " + url for name, url in record["links"].items())
+            lines.extend("- " + name + ": " + path for name, path in record["files"].items())
             lines.append("")
         atomic_write(state / "subscriptions.md", "\n".join(lines) + "\n")
         print("Profiles generated: %d accounts, rules %s" % (len(records), digest[:12]))
@@ -500,21 +495,60 @@ def generate(config):
             shutil.rmtree(staging)
 
 
+def export_profiles(config, stream, label=None):
+    """Write an SSH-streamed archive; each account gets an independent folder."""
+    state = Path(config["state_dir"])
+    records = json.loads((state / "profiles.json").read_text())["accounts"]
+    if label is not None:
+        records = [r for r in records if r["label"] == label]
+        if len(records) != 1:
+            raise ValueError("Account label must match one active account")
+    readme = ("Surge: import surge.conf as a local profile.\n"
+              "Mihomo: import mihomo.yaml as a local profile.\n"
+              "Shadowrocket: import the vmess address in node.txt, then import shadowrocket.conf.\n"
+              "No managed-profile URL. Download a new archive over SSH after rule updates.\n"
+              "Share only this account folder.\n").encode()
+    with tarfile.open(fileobj=stream, mode="w|gz") as archive:
+        used = set()
+        for record in records:
+            folder = re.sub(r"[^\w.-]", "_", record["label"])
+            if folder in ("", ".", "..") or folder in used:
+                raise ValueError("Unsafe or duplicate export label")
+            used.add(folder)
+            for name, path in record["files"].items():
+                member = archive.gettarinfo(path, arcname=folder + "/" + name)
+                member.mode = 0o600
+                member.uid = member.gid = 0
+                member.uname = member.gname = ""
+                with open(path, "rb") as content:
+                    archive.addfile(member, content)
+            member = tarfile.TarInfo(folder + "/README.txt")
+            member.size = len(readme)
+            member.mode = 0o600
+            archive.addfile(member, io.BytesIO(readme))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["rules", "profiles"])
+    parser.add_argument("action", choices=["rules", "profiles", "export"])
+    parser.add_argument("--account", help="Export only this account display label")
     parser.add_argument("--config", type=Path, default=Path("/etc/proxy-distribution/config.json"))
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
     if not re.fullmatch(r"[\w.-]+/[\w.-]+", config["repository"]):
         raise ValueError("Invalid repository")
-    if config["public_url"] != "https://" + config["server"]:
-        raise ValueError("Public URL must match the TLS endpoint")
+    if config.get("rules_delivery") != "jsdelivr":
+        raise ValueError("SSH-only profiles require public rules on jsDelivr")
     state = Path(config["state_dir"])
     state.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (state / "sync.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        (mirror if args.action == "rules" else generate)(config)
+        if args.action == "export":
+            with contextlib.redirect_stdout(sys.stderr):
+                generate(config)
+            export_profiles(config, sys.stdout.buffer, args.account)
+        else:
+            (mirror if args.action == "rules" else generate)(config)
 
 
 if __name__ == "__main__":
@@ -524,7 +558,7 @@ if __name__ == "__main__":
         # HTTP error URLs / converter responses can contain credentials.
         # Keep errors useful while ensuring those payloads cannot enter journals.
         if isinstance(error, (urllib.error.HTTPError, urllib.error.URLError)):
-            print("Distribution failed: network request (%s)" % getattr(error, "code", type(error).__name__))
+            print("Distribution failed: network request (%s)" % getattr(error, "code", type(error).__name__), file=sys.stderr)
         else:
-            print("Distribution failed: " + type(error).__name__)
+            print("Distribution failed: " + type(error).__name__, file=sys.stderr)
         raise SystemExit(1)
