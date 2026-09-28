@@ -23,6 +23,7 @@ import urllib.request
 
 MAX_BUNDLE = 32 * 1024 * 1024
 MAX_EXPANDED = 96 * 1024 * 1024
+BUSINESS_RULE_SETS = {"lan-com", "wan-com", "futu-broker"}
 
 
 def fetch(url, limit=MAX_BUNDLE, method=None, data=None):
@@ -152,6 +153,9 @@ def mirror(config):
 
 def load_accounts(config, now=None):
     now = time.time() if now is None else now
+    business_accounts = config.get("business_rule_accounts", [])
+    if not isinstance(business_accounts, list) or any(not isinstance(email, str) or not email for email in business_accounts):
+        raise ValueError("Business rule accounts must be a list of account identifiers")
     database = Path(config["database"]).resolve()
     connection = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)
     connection.execute("BEGIN")
@@ -195,7 +199,9 @@ def load_accounts(config, now=None):
                     raise ValueError("Client is missing subscription identity")
                 email = client.get("email", "account")
                 label = config.get("account_labels", {}).get(email, email)
-                account = accounts.setdefault(account_id, {"label": label, "nodes": [], "expiry": expiry})
+                account = accounts.setdefault(account_id, {
+                    "label": label, "nodes": [], "expiry": expiry,
+                    "business_rules": email in business_accounts})
                 node = {"name": mapping["name"], "type": "vmess", "server": config["server"],
                         "port": config["port"], "uuid": client["id"], "alterId": 0,
                         "cipher": "aes-128-gcm", "tls": True, "skip-cert-verify": False,
@@ -254,6 +260,24 @@ def rewrite_rules(fragment, config, digest):
     return fragment.replace(original, replacement)
 
 
+def select_rules(fragment, client, business_rules=False):
+    """Omit business routing and providers unless this account opts in."""
+    if business_rules:
+        return fragment
+    names = "(?:" + "|".join(sorted(BUSINESS_RULE_SETS)) + ")"
+    if client == "mihomo":
+        fragment = re.sub(r"(?ms)^  " + names + r":\n.*?(?=^  [a-z0-9-]+:\n|^rules:\n|\Z)", "", fragment)
+        return re.sub(r'(?m)^  - "RULE-SET,' + names + r',[^"\n]*"\n?', "", fragment)
+    return re.sub(r"(?m)^RULE-SET,[^\n,]*/" + names + r"\.list,[^\n]*\n?", "", fragment)
+
+
+def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=False):
+    template = Path(config["templates_dir"]) / "shadowrocket.conf"
+    text = string.Template(template.read_text()).substitute(MANAGED_URL=managed_url)
+    fragment = select_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", business_rules)
+    return text + rewrite_rules(fragment, config, digest)
+
+
 def render_profiles(config, account, converted, token, rules_dir, digest):
     templates = Path(config["templates_dir"])
     origin = config["public_url"].rstrip("/")
@@ -271,11 +295,14 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
     common = {"PROXY_NAMES": ", ".join(names), "ORIGIN": origin}
     surge = string.Template((templates / "surge.conf").read_text()).substitute(
         common, MANAGED_URL=origin + "/profiles/" + token + "/surge.conf", PROXIES="\n".join(surge_lines))
-    surge += rewrite_rules((rules_dir / "surge/rules.conf").read_text(), config, digest)
+    business_rules = bool(account.get("business_rules", False))
+    surge_fragment = select_rules((rules_dir / "surge/rules.conf").read_text(), "surge", business_rules)
+    surge += rewrite_rules(surge_fragment, config, digest)
     mihomo_base = json.loads((templates / "mihomo.json").read_text())
     mihomo_base["proxies"] = proxies
     mihomo_base["proxy-groups"] = [{"name": "PROXY", "type": "select", "proxies": names}]
-    fragment = rewrite_rules((rules_dir / "mihomo/rules.yaml").read_text(), config, digest)
+    fragment = select_rules((rules_dir / "mihomo/rules.yaml").read_text(), "mihomo", business_rules)
+    fragment = rewrite_rules(fragment, config, digest)
     # DNS classifications follow the same ordered domain rules, including custom
     # overrides; do not let a broad domestic set override an explicit proxy set.
     behaviors = dict(re.findall(r'\n  ([a-z0-9-]+):\n    type: http\n    behavior: (\w+)', fragment))
@@ -299,6 +326,8 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
     mihomo_base["dns"]["nameserver-policy"] = dns_policy
     filters = mihomo_base["dns"]["fake-ip-filter"]
     for name in ("private", "lan-com"):
+        if name == "lan-com" and not business_rules:
+            continue
         source = rules_dir / "surge" / (name + ".list")
         if source.exists():
             for line in source.read_text().splitlines():
@@ -320,7 +349,9 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
     if len(uris) != len(names) or any(not line.startswith("vmess://") for line in uris):
         raise ValueError("Unexpected URI node list")
     return {"surge.conf": surge, "mihomo.yaml": mihomo,
-            "shadowrocket.txt": base64.b64encode(("\n".join(uris) + "\n").encode()).decode() + "\n"}
+            "shadowrocket.txt": base64.b64encode(("\n".join(uris) + "\n").encode()).decode() + "\n",
+            "shadowrocket.conf": render_shadowrocket(
+                config, rules_dir, digest, origin + "/profiles/" + token + "/shadowrocket.conf", business_rules)}
 
 
 def generate(config):
@@ -359,13 +390,13 @@ def generate(config):
             for name, content in profiles.items():
                 (directory / name).write_text(content)
             origin = config["public_url"].rstrip("/")
-            records.append({"label": account["label"], "nodes": [n["name"] for n in account["nodes"]],
+            records.append({"label": account["label"], "business_rules": account["business_rules"],
+                            "nodes": [n["name"] for n in account["nodes"]],
                             "links": {name: origin + "/profiles/" + token + "/" + name for name in profiles}})
         shared = staging / "shared"
         shared.mkdir()
-        shadowrocket = string.Template((Path(config["templates_dir"]) / "shadowrocket.conf").read_text()).substitute(
-            ORIGIN=config["public_url"].rstrip("/"))
-        shadowrocket += rewrite_rules((rules_dir / "shadowrocket/rules.conf").read_text(), config, digest)
+        shadowrocket = render_shadowrocket(config, rules_dir, digest,
+                                           config["public_url"].rstrip("/") + "/proxy-config/shadowrocket.conf")
         (shared / "shadowrocket.conf").write_text(shadowrocket)
         # nginx's worker group is configured explicitly; credentials are never world-readable.
         group = config["web_group"]
@@ -379,7 +410,8 @@ def generate(config):
         switch_link(public / "profiles/current", destination)
         atomic_write(current, json.dumps({"fingerprint": fingerprint, "rules": digest, "accounts": records}, ensure_ascii=False, indent=2) + "\n")
         lines = ["# DMIT 订阅链接", "", "此文件包含个人访问令牌，请仅将对应账号的链接交给本人。", "",
-                 "Shadowrocket 共用分流配置：" + config["public_url"].rstrip("/") + "/proxy-config/shadowrocket.conf", ""]
+                 "Shadowrocket：添加对应账号的 shadowrocket.txt 节点订阅，并启用该账号的 shadowrocket.conf 分流配置。", "",
+                 "共用基础分流配置（不含业务规则）：" + config["public_url"].rstrip("/") + "/proxy-config/shadowrocket.conf", ""]
         for record in records:
             lines.extend(["## " + record["label"], ""])
             lines.extend("- " + name + ": " + url for name, url in record["links"].items())

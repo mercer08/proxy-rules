@@ -9,6 +9,7 @@
   "state_dir": "/var/lib/proxy-distribution",
   "public_dir": "/var/www/proxy-distribution",
   "web_group": "www",
+  "business_rule_accounts": [],
   "inbounds": {
     "dmit-direct": {"name": "DMIT-Native", "udp": false},
     "dmit-warp": {"name": "DMIT-WARP", "udp": false}
