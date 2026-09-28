@@ -48,7 +48,7 @@ const state = { accounts: [], account: null, client: 'surge', file: 'surge.conf'
 const clients = {
   surge: { files: ['surge.conf'], title: '导入 Surge', help: '下载 surge.conf，在 Surge 中导入本地配置。公共规则仍由 jsDelivr 提供。' },
   mihomo: { files: ['mihomo.yaml'], title: '导入 Clash / Mihomo', help: '下载 mihomo.yaml，在支持 Mihomo 的客户端中导入本地配置。公共规则经 DIRECT 下载。' },
-  shadowrocket: { files: ['shadowrocket.conf', 'node.txt', 'shadowrocket.txt'], title: '导入 Shadowrocket', help: '先复制 node.txt 的 vmess 地址导入节点，再导入并启用 shadowrocket.conf。shadowrocket.txt 是 Base64 节点格式。' },
+  shadowrocket: { files: ['shadowrocket.conf', 'node.txt', 'shadowrocket.txt'], title: '导入 Shadowrocket', help: '导入并启用 shadowrocket.conf，文件已包含此账号的节点和分流规则。node.txt 可用于单独导入节点；shadowrocket.txt 是 Base64 节点格式。' },
 };
 const editor = monaco.editor.create($('editor'), {
   value: '', language: 'proxy-conf', theme: 'private-light', automaticLayout: true,

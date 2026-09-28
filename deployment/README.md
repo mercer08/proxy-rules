@@ -54,9 +54,10 @@ ssh root@VPS_IP 'python3 /opt/proxy-distribution/distribute.py export --account 
 | --- | --- |
 | Surge | 导入本地 `surge.conf` |
 | Clash / Mihomo | 导入本地 `mihomo.yaml`，客户端需支持 Mihomo 配置 |
-| Shadowrocket | 复制 `node.txt` 的 vmess URI 导入节点，再导入并启用本地 `shadowrocket.conf` |
+| Shadowrocket | 导入并启用本地 `shadowrocket.conf`，文件包含此账号的节点定义和分流规则 |
 
 `shadowrocket.txt` 另提供 Base64 节点订阅格式，供支持该格式的导入工具使用。
+`node.txt` 可用于单独导入节点；完整 Shadowrocket 配置的 `[Proxy]` 段与 URI 使用同一份账号节点信息，策略组直接引用节点名称。
 导出的完整配置没有托管配置地址或自动更新地址，公共规则文件仍从 jsDelivr 下载。
 
 文件清单位于 `/var/lib/proxy-distribution/subscriptions.md`；

@@ -25,7 +25,9 @@ accounts = {name: {'label': label, 'nodes': [{'name': 'DMIT-Native'}], 'business
 c.d.load_accounts = lambda config: accounts
 c.d.verify_cdn = lambda *args: 0
 def converted(config, key, nodes):
-    return {'proxies': [{'name': 'DMIT-Native', 'type': 'vmess', 'server': '203.0.113.1', 'port': 443, 'uuid': 'synthetic-' + key, 'tls': True}],
+    return {'proxies': [{'name': 'DMIT-Native', 'type': 'vmess', 'server': '203.0.113.1', 'port': 443, 'uuid': 'synthetic-' + key, 'tls': True,
+                         'alterId': 0, 'cipher': 'aes-128-gcm', 'network': 'ws', 'udp': True, 'skip-cert-verify': False,
+                         'ws-opts': {'path': '/synthetic-ws', 'headers': {'Host': '203.0.113.1'}}}],
             'Surge': 'DMIT-Native=vmess,203.0.113.1,443,username=synthetic-' + key + ',tls=true',
             'URI': 'vmess://c3ludGhldGljLXRlc3Qtb25seQ=='}
 c.d.substore = converted

@@ -367,15 +367,37 @@ def select_rules(fragment, client, business_rules=False):
     return re.sub(r"(?m)^RULE-SET,[^\n,]*/" + names + r"\.list,[^\n]*\n?", "", fragment)
 
 
-def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=False, proxy_names=None):
+def shadowrocket_proxy(node):
+    if node.get("type") != "vmess" or node.get("network") != "ws" or node.get("tls") is not True:
+        raise ValueError("Shadowrocket profile requires VMess/WebSocket/TLS")
+    if node.get("skip-cert-verify") is True:
+        raise ValueError("Shadowrocket certificate verification must remain enabled")
+    ws = node["ws-opts"]
+    values = [node["name"], node["server"], str(node["port"]), node["uuid"],
+              node["cipher"], ws["headers"]["Host"], ws["path"], node.get("servername", node["server"])]
+    if any(not isinstance(value, str) or not value or any(c in value for c in ",\r\n") for value in values):
+        raise ValueError("Unsafe Shadowrocket node field")
+    name, server, port, uuid, cipher, host, path, peer = values
+    return (f"{name} = vmess,{server},{port},password={uuid},method={cipher},alterId={node.get('alterId', 0)},"
+            f"tls=true,peer={peer},skip-cert-verify=false,obfs=websocket,obfs-host={host},obfs-uri={path},"
+            f"udp={1 if node.get('udp') else 0}")
+
+
+def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=False, proxy_names=None, proxies=None):
     template = Path(config["templates_dir"]) / "shadowrocket.conf"
+    if proxies is not None:
+        proxy_names = [node["name"] for node in proxies]
     if proxy_names is None:
         proxy_names = [inbound["name"] for inbound in config.get("inbounds", {}).values()]
     options = ""
     if proxy_names:
-        pattern = "^(?:" + "|".join(re.escape(name) for name in proxy_names) + ")$"
-        options = ", policy-regex-filter=" + pattern + ", policy-select-name=" + proxy_names[0]
-    text = string.Template(template.read_text()).substitute(MANAGED_URL="", PROXY_GROUP_OPTIONS=options)
+        if proxies is not None:
+            options = "," + ",".join(proxy_names) + ", policy-select-name=" + proxy_names[0]
+        else:
+            pattern = "^(?:" + "|".join(re.escape(name) for name in proxy_names) + ")$"
+            options = ", policy-regex-filter=" + pattern + ", policy-select-name=" + proxy_names[0]
+    text = string.Template(template.read_text()).substitute(
+        MANAGED_URL="", PROXY_GROUP_OPTIONS=options, PROXIES="\n".join(shadowrocket_proxy(node) for node in (proxies or [])))
     text = re.sub(r"(?m)^update-url\s*=.*\n?", "", text)
     fragment = prepare_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", config, rules_dir, digest, business_rules)
     return text + fragment
@@ -464,7 +486,7 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
             "shadowrocket.txt": base64.b64encode(("\n".join(uris) + "\n").encode()).decode() + "\n",
             "node.txt": "\n".join(uris) + "\n",
             "shadowrocket.conf": render_shadowrocket(
-                config, rules_dir, digest, origin + "/profiles/" + token + "/shadowrocket.conf", business_rules, names)}
+                config, rules_dir, digest, origin + "/profiles/" + token + "/shadowrocket.conf", business_rules, proxies=proxies)}
 
 
 def generate(config):
@@ -527,7 +549,7 @@ def generate(config):
         switch_link(profiles_root / "current", destination)
         atomic_write(current, json.dumps({"fingerprint": fingerprint, "rules": digest, "accounts": records}, ensure_ascii=False, indent=2) + "\n")
         lines = ["# DMIT SSH 配置文件", "", "仅通过 SSH 下载配置；公网下载入口已关闭。", "",
-                 "Surge/Mihomo 导入本地配置文件。Shadowrocket 先复制 node.txt 的 vmess 地址导入节点，再导入 shadowrocket.conf。", "",
+                 "Surge/Mihomo/Shadowrocket 导入本地配置文件。Shadowrocket 配置包含账号节点，可选用 node.txt 单独导入节点。", "",
                  "完整配置没有自动更新 URL。规则更新后需重新 SSH 导出完整配置。", ""]
         for record in records:
             lines.extend(["## " + record["label"], ""])
@@ -550,7 +572,8 @@ def export_profiles(config, stream, label=None):
             raise ValueError("Account label must match one active account")
     readme = ("Surge: import surge.conf as a local profile.\n"
               "Mihomo: import mihomo.yaml as a local profile.\n"
-              "Shadowrocket: import the vmess address in node.txt, then import shadowrocket.conf.\n"
+              "Shadowrocket: import and activate shadowrocket.conf; it includes this account's node.\n"
+              "node.txt optionally provides the standalone vmess node address.\n"
               "No managed-profile URL. Download a new archive over SSH after rule updates.\n"
               "Share only this account folder.\n").encode()
     with tarfile.open(fileobj=stream, mode="w|gz") as archive:
