@@ -307,7 +307,7 @@ def verify_cdn(config, rules_dir, digest):
     files = set()
     raw = "https://raw.githubusercontent.com/" + config["repository"] + "/release/"
     for client, filename in (("surge", "rules.conf"), ("mihomo", "rules.yaml"), ("shadowrocket", "rules.conf")):
-        fragment = select_rules((rules_dir / client / filename).read_text(), client)
+        fragment = strip_private_rule_references((rules_dir / client / filename).read_text(), client)
         files.update(re.findall(re.escape(raw) + r"([a-z0-9-]+/[a-z0-9-]+\.(?:list|domainset|yaml))", fragment))
     if not files:
         raise ValueError("No public CDN rule files found")
@@ -322,37 +322,54 @@ def verify_cdn(config, rules_dir, digest):
     return len(files)
 
 
-def inline_business_rules(fragment, client, rules_dir):
-    """Keep account-only rules in the private profile, preserving their order."""
-    names = "(?:" + "|".join(sorted(BUSINESS_RULE_SETS)) + ")"
-    if client == "mihomo":
-        def provider(match):
-            name = match.group(1)
-            # The generated business providers have classical, JSON-quoted payloads.
-            payload = (rules_dir / "mihomo" / (name + ".yaml")).read_text()
-            if not payload.startswith("payload:\n"):
-                raise ValueError("Unexpected business rule payload")
-            return "  " + name + ":\n    type: inline\n    behavior: classical\n    payload:\n" + "".join(
-                "    " + line + "\n" for line in payload.splitlines()[1:])
-        return re.sub(r"(?ms)^  (" + names + r"):.*?(?=^  [a-z0-9-]+:\n|^rules:\n|\Z)", provider, fragment)
+def private_lan_path(config):
+    return Path(config.get("private_lan_file", str(Path(config["state_dir"]) / "private-rules/lan-com.list")))
 
-    def rules(match):
-        name, policy = match.group(1), match.group(2)
-        lines = ["# Account business rule set: " + name]
-        for line in (rules_dir / client / (name + ".list")).read_text().splitlines():
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split(",")
-            parts.insert(2, policy)
-            lines.append(",".join(parts))
-        return "\n".join(lines) + "\n"
-    return re.sub(r"(?m)^RULE-SET,[^\n,]*/(" + names + r")\.list,([^,\n]+)\n?", rules, fragment)
+
+def parse_private_lan(content):
+    """A private domain list without policies, URLs, or client configuration."""
+    if not isinstance(content, str) or len(content.encode()) > 2 * 1024 * 1024:
+        raise ValueError("Private rules must be text smaller than 2 MB")
+    rules = []
+    for number, raw in enumerate(content.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(",")
+        if (len(parts) != 2 or parts[0] not in ("DOMAIN", "DOMAIN-SUFFIX")
+                or not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*", parts[1])):
+            raise ValueError("Invalid private domain rule at line " + str(number))
+        rules.append(parts[0] + "," + parts[1].lower())
+    return list(dict.fromkeys(rules))
+
+
+def strip_private_rule_references(fragment, client):
+    # Also accept older public snapshots during migration without reading their
+    # LAN payloads or ever constructing a CDN URL for the private set.
+    if client == "mihomo":
+        fragment = re.sub(r"(?ms)^  lan-com:\n.*?(?=^  [a-z0-9-]+:\n|^rules:\n|\Z)", "", fragment)
+        return re.sub(r'(?m)^  - "RULE-SET,lan-com,[^"\n]*"\n?', "", fragment)
+    return re.sub(r"(?m)^RULE-SET,[^\n,]*/lan-com\.list,[^\n]*\n?", "", fragment)
+
+
+def inject_private_lan(fragment, client, config):
+    rules = parse_private_lan(private_lan_path(config).read_text())
+    if client == "mihomo":
+        provider = "  lan-com:\n    type: inline\n    behavior: classical\n"
+        provider += ("    payload:\n" + "".join("      - " + json.dumps(r) + "\n" for r in rules)) if rules else "    payload: []\n"
+        fragment = fragment.replace("rules:\n", provider + "rules:\n", 1)
+        marker = r'(?m)^(  - "RULE-SET,(?:wan-com|futu-broker|proxy),|  - "MATCH,)'
+        return re.sub(marker, lambda m: '  - "RULE-SET,lan-com,DIRECT"\n' + m.group(), fragment, count=1)
+    private = "# Private rule set: lan-com (SSH only)\n" + "".join(r + ",DIRECT\n" for r in rules)
+    marker = r"(?m)^(RULE-SET,[^\n,]*/(?:wan-com|futu-broker|proxy)\.list,|FINAL,)"
+    return re.sub(marker, lambda m: private + m.group(), fragment, count=1)
 
 
 def prepare_rules(fragment, client, config, rules_dir, digest, business_rules=False):
+    fragment = strip_private_rule_references(fragment, client)
     fragment = select_rules(fragment, client, business_rules)
-    if config.get("rules_delivery") == "jsdelivr" and business_rules:
-        fragment = inline_business_rules(fragment, client, rules_dir)
+    if business_rules:
+        fragment = inject_private_lan(fragment, client, config)
     return rewrite_rules(fragment, config, digest)
 
 
@@ -501,13 +518,14 @@ def generate(config):
     template_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in template_files if p.is_file()}
     fingerprint = hashlib.sha256(json.dumps({"config": config, "accounts": accounts, "rules": digest,
                                             "templates": template_hashes, "overrides": overrides,
+                                            "private_lan": private_lan_path(config).read_text() if any(a["business_rules"] for a in accounts.values()) else "",
                                             "generator": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}, sort_keys=True).encode()).hexdigest()
     current = state / "profiles.json"
     if current.exists() and json.loads(current.read_text()).get("fingerprint") == fingerprint:
         return
     if config.get("rules_delivery") == "jsdelivr":
         cdn_state = state / "cdn-verified.json"
-        expected = {"tag": rule_state["tag"], "digest": digest, "origin": rule_origin(config, digest)}
+        expected = {"public_rule_scope": 2, "tag": rule_state["tag"], "digest": digest, "origin": rule_origin(config, digest)}
         if not cdn_state.exists() or json.loads(cdn_state.read_text()) != expected:
             count = verify_cdn(config, rules_dir, digest)
             atomic_write(cdn_state, json.dumps(expected) + "\n")

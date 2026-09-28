@@ -28,18 +28,6 @@
     "expected": "PROXY"
   },
   {
-    "domain": "removed-private-domain.invalid",
-    "expected": "DIRECT"
-  },
-  {
-    "domain": "removed-private-domain.invalid",
-    "expected": "DIRECT"
-  },
-  {
-    "domain": "api.launchdarkly.com",
-    "expected": "DIRECT"
-  },
-  {
     "domain": "api.mexc.com",
     "expected": "PROXY"
   },

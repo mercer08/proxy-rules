@@ -37,6 +37,7 @@ class ConsoleTests(unittest.TestCase):
         self.assets = self.state / 'assets'
         self.assets.mkdir()
         (self.assets / 'index.html').write_text('<html>test</html>')
+        c.d.atomic_write(self.state / 'private-rules/lan-com.list', 'DOMAIN-SUFFIX,internal.business.test\n')
         self.server = c.serve({'state_dir': str(self.state)}, self.assets, 0)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -118,3 +119,29 @@ class ConsoleTests(unittest.TestCase):
         with patch.object(app, 'regenerate'):
             self.assertEqual(self.request(path, 'DELETE', {'etag': original['etag']})[0], 200)
         self.assertFalse(override.exists())
+
+    def test_private_lan_validation_conflicts_rollback_and_guards(self):
+        path = '/api/private-rules/lan-com'
+        status, body, headers = self.request(path)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers['Cache-Control'], 'no-store')
+        original = json.loads(body)
+        app = self.server.console
+        changed = 'DOMAIN,second.internal.test\n'
+        with patch.object(app, 'regenerate') as regenerate:
+            self.assertEqual(self.request(path, 'PUT', {'content': changed, 'etag': 'stale'})[0], 409)
+            for invalid in ('DOMAIN,test,DIRECT', 'RULE-SET,https://example.com', 'DOMAIN,test\x00'):
+                self.assertEqual(self.request(path, 'PUT', {'content': invalid, 'etag': original['etag']})[0], 400)
+            self.assertEqual(self.request(path, 'PUT', {'content': changed, 'etag': original['etag']})[0], 200)
+            regenerate.assert_called_once()
+        private = c.d.private_lan_path(app.config)
+        self.assertEqual(private.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(private.read_text(), changed)
+        current = json.loads(self.request(path)[1])
+        with patch.object(app, 'regenerate', side_effect=RuntimeError('secret')):
+            status, body, _ = self.request(path, 'PUT', {'content': original['content'], 'etag': current['etag']})
+            self.assertEqual(status, 503)
+            self.assertNotIn(b'secret', body)
+            self.assertEqual(private.read_text(), changed)
+        self.assertEqual(self.request(path, headers={'Origin': 'https://evil.example'})[0], 403)
+        self.assertEqual(self.request(path, 'DELETE', {'etag': current['etag']})[0], 405)

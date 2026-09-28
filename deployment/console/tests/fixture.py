@@ -20,7 +20,7 @@ for client in ('surge', 'shadowrocket', 'mihomo'):
 (state / 'rules.json').write_text(json.dumps({'digest': digest, 'tag': 'rules-now-' + digest[:10]}))
 config = {'state_dir': str(state), 'templates_dir': str(BASE / 'templates'), 'repository': 'mercer08/proxy-rules',
           'rules_delivery': 'jsdelivr', 'public_url': 'https://203.0.113.1', 'server': '203.0.113.1'}
-accounts = {name: {'label': label, 'nodes': [{'name': 'dmit-lax' if name == 'owner' else 'dmit-fixture-friend'}], 'business_rules': False}
+accounts = {name: {'label': label, 'nodes': [{'name': 'dmit-lax' if name == 'owner' else 'dmit-fixture-friend'}], 'business_rules': name == 'owner'}
             for name, label in (('owner', '我的电脑'), ('friend', '演示账号'))}
 c.d.load_accounts = lambda config: accounts
 c.d.verify_cdn = lambda *args: 0
@@ -32,5 +32,6 @@ def converted(config, key, nodes):
             'Surge': name + '=vmess,203.0.113.1,443,username=synthetic-' + key + ',tls=true',
             'URI': 'vmess://c3ludGhldGljLXRlc3Qtb25seQ=='}
 c.d.substore = converted
+c.d.atomic_write(state / 'private-rules/lan-com.list', 'DOMAIN-SUFFIX,internal.business.test\n')
 c.d.generate(config)
 c.serve(config, BASE / 'console/dist', 8766).serve_forever()

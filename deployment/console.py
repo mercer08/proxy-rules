@@ -107,6 +107,29 @@ class Console:
             raise ConsoleError(503, '生成失败，编辑未保存，请稍后重试') from None
         return self.file(identifier, name)
 
+    def private_lan(self):
+        path = d.private_lan_path(self.config)
+        content = path.read_text()
+        return {'name': 'lan-com.list', 'content': content,
+                'etag': hashlib.sha256(content.encode()).hexdigest(), 'edited': False}
+
+    def edit_private_lan(self, content, etag):
+        existing = self.private_lan()
+        if etag != existing['etag']:
+            raise ConsoleError(409, '内网规则已变化，请重新加载后编辑')
+        try:
+            d.parse_private_lan(content)
+        except ValueError as error:
+            raise ConsoleError(400, str(error)) from None
+        path = d.private_lan_path(self.config)
+        d.atomic_write(path, content)
+        try:
+            self.regenerate()
+        except Exception:
+            d.atomic_write(path, existing['content'])
+            raise ConsoleError(503, '生成失败，内网规则未保存') from None
+        return self.private_lan()
+
     def package(self, identifier):
         record = self.account(identifier)
         output = io.BytesIO()
@@ -116,7 +139,7 @@ class Console:
                 archive.writestr(name, content)
             archive.writestr('README.txt',
                 'Surge：导入 surge.conf。\nMihomo：导入 mihomo.yaml。\n'
-                'Shadowrocket：复制 node.txt 的 vmess 地址导入节点，然后导入并启用 shadowrocket.conf。\n'
+                'Shadowrocket：导入并启用 shadowrocket.conf，已包含此账号的节点。node.txt 可单独导入节点。\n'
                 '仅分享本人的文件包。新规则版本需要重新通过 SSH 下载并导入完整配置。\n')
         return output.getvalue(), record['label'] + '.zip'
 
@@ -180,6 +203,13 @@ class Handler(BaseHTTPRequestHandler):
             app = self.server.console
             if path.startswith('/api/'):
                 with app.lock():
+                    if path == '/api/private-rules/lan-com':
+                        if method == 'GET':
+                            return self.json(app.private_lan())
+                        if method == 'PUT':
+                            body = self.request_body()
+                            return self.json(app.edit_private_lan(body.get('content'), body.get('etag')))
+                        raise ConsoleError(405, '操作不支持')
                     if path == '/api/accounts' and method == 'GET':
                         return self.json({'accounts': app.list_accounts()})
                     if path == '/api/refresh' and method == 'POST':

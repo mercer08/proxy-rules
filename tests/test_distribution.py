@@ -324,7 +324,10 @@ rules:
                 ("DIRECT" if name in ("private", "lan-com") else "PROXY") + '"\n' for name in names)
             (root / "mihomo/rules.yaml").write_text(providers + rules + '  - "MATCH,PROXY"\n')
             converted = {"proxies": [vmess_node()], "Surge": "DMIT-Native=vmess,203.0.113.1,443,tls=true", "URI": "vmess://synthetic"}
+            private = root / "private-rules/lan-com.list"
+            d.atomic_write(private, "DOMAIN-SUFFIX,internal.business.test\n")
             config = {"templates_dir": str(ROOT / "deployment/templates"), "server": "203.0.113.1",
+                      "private_lan_file": str(private), "state_dir": str(root),
                       "public_url": "https://203.0.113.1", "repository": "mercer08/proxy-rules"}
             for enabled in (False, True):
                 rendered = d.render_profiles(config, {"business_rules": enabled}, converted, "a" * 48, root, "b" * 64)
@@ -342,6 +345,12 @@ rules:
                 self.assertNotIn("#!MANAGED-CONFIG", rendered["surge.conf"])
                 self.assertNotIn("/profiles/", rendered["surge.conf"])
                 self.assertEqual(rendered["node.txt"], "vmess://synthetic\n")
+            # A clean public snapshot has no LAN provider or reference. Private
+            # injection must work independently of the old public files.
+            for client, filename in (("surge", "rules.conf"), ("shadowrocket", "rules.conf"), ("mihomo", "rules.yaml")):
+                path = root / client / filename
+                path.write_text(d.strip_private_rule_references(path.read_text(), client))
+                (root / client / ("lan-com.yaml" if client == "mihomo" else "lan-com.list")).unlink()
             shared = d.render_shadowrocket(config, root, "b" * 64, "https://203.0.113.1/proxy-config/shadowrocket.conf")
             self.assertTrue(all(name not in shared for name in d.BUSINESS_RULE_SETS))
             cdn_config = dict(config, rules_delivery="jsdelivr", _rules_tag="rules-now-" + "b" * 10)
@@ -351,12 +360,13 @@ rules:
                     self.assertNotIn("/proxy-rules/", rendered[filename])
                     self.assertNotIn("githubusercontent", rendered[filename])
                     self.assertIn("cdn.jsdelivr.net/gh/", rendered[filename])
-                    for name in d.BUSINESS_RULE_SETS:
-                        self.assertNotIn("/" + name + ".", rendered[filename])
+                    self.assertNotIn("/lan-com.", rendered[filename])
+                    for name in ("wan-com", "futu-broker"):
+                        self.assertEqual("/" + name + "." in rendered[filename], enabled)
                 if enabled:
                     self.assertIn("type: inline", rendered["mihomo.yaml"])
                     for filename in ("surge.conf", "shadowrocket.conf"):
-                        self.assertIn("IP-CIDR,203.0.113.0/24,PROXY,no-resolve", rendered[filename])
+                        self.assertNotIn("IP-CIDR,203.0.113.0/24,PROXY,no-resolve", rendered[filename])
                         self.assertLess(rendered[filename].index("internal.business.test"), rendered[filename].index("/proxy.list"))
                 dns = yaml.safe_load(rendered["mihomo.yaml"])["dns"]
                 self.assertEqual("rule-set:lan-com" in dns["nameserver-policy"], enabled)

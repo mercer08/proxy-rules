@@ -137,6 +137,8 @@ def matches(rule, domain=None, ip=None):
 
 
 def custom_order(config):
+    if any(item["name"] == "lan-com" for item in config.get("custom_sets", [])):
+        raise ValueError("Private LAN rules cannot be published")
     return [("direct", "DIRECT"), ("proxy", "PROXY"), ("reject", "REJECT")] + [
         (item["name"], item["policy"]) for item in config.get("custom_sets", [])]
 

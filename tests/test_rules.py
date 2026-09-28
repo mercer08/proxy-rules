@@ -122,15 +122,12 @@ class RuleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.fixture(root)
-            for name in ("lan-com", "wan-com", "futu-broker"):
+            for name in ("wan-com", "futu-broker"):
                 (root / "custom" / (name + ".list")).write_text((ROOT / "custom" / (name + ".list")).read_text())
             (root / "inputs/direct.txt").write_text(b.yaml_payload(["+.mexc.com", "+.futu.cn"]))
             (root / "inputs/reject.txt").write_text(b.yaml_payload(["+.launchdarkly.com", "+.clarity.ms"]))
             (root / "inputs/cncidr.txt").write_text(b.yaml_payload(["1.14.242.0/23"]))
-            cases = [{"domain": "removed-private-domain.invalid", "expected": "DIRECT"},
-                     {"domain": "removed-private-domain.invalid", "expected": "DIRECT"},
-                     {"domain": "api.launchdarkly.com", "expected": "DIRECT"},
-                     {"domain": "api.mexc.com", "expected": "PROXY"},
+            cases = [{"domain": "api.mexc.com", "expected": "PROXY"},
                      {"domain": "clarity.ms", "expected": "PROXY"},
                      {"domain": "futu.cn", "expected": "PROXY"},
                      {"domain": "new-futu-endpoint.example", "expected": "PROXY"},
@@ -139,11 +136,11 @@ class RuleTests(unittest.TestCase):
                      {"ip": "10.0.0.1", "expected": "DIRECT"}]
             (root / "tests/cases.json").write_text(json.dumps(cases))
             manifest = b.build(root, root / "out", root / "inputs", "a" * 40)
-            self.assertEqual(manifest["custom_counts"]["lan-com"], 24)
+            self.assertNotIn("lan-com", manifest["custom_counts"])
             self.assertEqual(manifest["custom_counts"]["wan-com"], 19)
             for client, filename in (("surge", "rules-ads.conf"), ("shadowrocket", "rules-ads.conf"), ("mihomo", "rules-ads.yaml")):
                 text = (root / "out" / client / filename).read_text()
-                self.assertLess(text.index("lan-com"), text.index("wan-com"))
+                self.assertNotIn("lan-com", text)
                 self.assertLess(text.index("futu-broker"), text.index("/reject."))
                 self.assertLess(text.index("futu-broker"), text.index("/cn."))
             self.assertIn("IP-CIDR,43.134.158.106/32,no-resolve", (root / "out/surge/futu-broker.list").read_text())
@@ -153,7 +150,7 @@ class RuleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.fixture(root)
-            for name in ("lan-com", "wan-com"):
+            for name in ("direct", "wan-com"):
                 (root / "custom" / (name + ".list")).write_text("DOMAIN,conflict.example\n")
             with self.assertRaisesRegex(ValueError, "Conflicting"):
                 b.build(root, root / "out", root / "inputs", "a" * 40)
@@ -195,6 +192,10 @@ class RuleTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "no longer matches"):
                 b.build(root, root / "out", root / "inputs", "a" * 40)
 
+
+    def test_private_lan_publication_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'Private LAN'):
+            b.custom_order({'custom_sets': [{'name': 'lan-com', 'policy': 'DIRECT'}]})
 
 if __name__ == "__main__":
     unittest.main()

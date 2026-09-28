@@ -69,3 +69,24 @@ test('select clients, highlight, edit, preserve, restore, download and use mobil
   expect(errors).toEqual([]);
   expect(requests.every(url => url.startsWith('http://127.0.0.1:8766/') || url.startsWith('blob:'))).toBeTruthy();
 });
+
+
+test('private LAN editor saves centrally and friends never receive internal rules', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: '内网规则' }).click();
+  await expect(page.locator('#file-origin')).toHaveText('SSH 私有');
+  await expect(page.locator('#restore')).toBeDisabled();
+  await expect(page.locator('#editor')).toContainText('internal.business.test');
+  await page.locator('.monaco-editor').click();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End');
+  await page.keyboard.type('\nDOMAIN,second.internal.test');
+  await page.locator('#save').click();
+  await expect(page.locator('#save-status')).toContainText('私有规则 · 已同步');
+  await page.getByRole('tab', { name: 'Surge', exact: true }).click();
+  await expect(page.locator('#editor')).toContainText('second.internal.test,DIRECT');
+  await page.locator('#search').fill('演示');
+  await page.locator('.account').click();
+  await expect(page.getByRole('tab', { name: '内网规则' })).toBeHidden();
+  await expect(page.locator('#editor')).not.toContainText('internal.business.test');
+  await expect(page.locator('#editor')).not.toContainText('second.internal.test');
+});

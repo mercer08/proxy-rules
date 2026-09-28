@@ -46,6 +46,7 @@ monaco.editor.defineTheme('private-light', { base: 'vs', inherit: true, rules: [
 const $ = (id) => document.getElementById(id);
 const state = { accounts: [], account: null, client: 'surge', file: 'surge.conf', baseline: '', etag: '', edited: false, loading: false, dirty: false, version: 0 };
 const clients = {
+  lan: { files: ['lan-com.list'], title: '私有内网规则', help: '只填写 DOMAIN,域名 或 DOMAIN-SUFFIX,域名，每行一条，固定直连。保存后同步到你的三个设备配置；不进入 GitHub 或 CDN。WAN、券商及通用规则由 jsDelivr 提供。' },
   surge: { files: ['surge.conf'], title: '导入 Surge', help: '下载 surge.conf，在 Surge 中导入本地配置。公共规则仍由 jsDelivr 提供。' },
   mihomo: { files: ['mihomo.yaml'], title: '导入 Clash / Mihomo', help: '下载 mihomo.yaml，在支持 Mihomo 的客户端中导入本地配置。公共规则经 DIRECT 下载。' },
   shadowrocket: { files: ['shadowrocket.conf', 'node.txt', 'shadowrocket.txt'], title: '导入 Shadowrocket', help: '导入并启用 shadowrocket.conf，文件已包含此账号的节点和分流规则。node.txt 可用于单独导入节点；shadowrocket.txt 是 Base64 节点格式。' },
@@ -69,7 +70,7 @@ async function api(path, options = {}) {
   if (!response.ok) throw new Error(body.error || '请求失败');
   return body;
 }
-function fileURL() { return `/api/accounts/${state.account.id}/files/${state.file}`; }
+function fileURL() { if (state.client === 'lan') return '/api/private-rules/lan-com'; return `/api/accounts/${state.account.id}/files/${state.file}`; }
 function confirmDiscard() { return !state.dirty || window.confirm('还有未保存的编辑，是否放弃这些修改？'); }
 function setLoading(value) {
   state.loading = value; editor.updateOptions({ readOnly: value || !state.account });
@@ -81,11 +82,11 @@ function setLoading(value) {
 function updateStatus() {
   state.dirty = editor.getValue() !== state.baseline;
   $('save-status').className = state.dirty ? 'unsaved' : 'saved';
-  $('save-status').innerHTML = `<span class="connection-dot"></span>${state.loading ? '正在处理…' : state.dirty ? '有未保存的编辑' : state.edited ? '已保存个人编辑' : '自动生成 · 未修改'}`;
+  $('save-status').innerHTML = `<span class="connection-dot"></span>${state.loading ? '正在处理…' : state.dirty ? '有未保存的编辑' : state.client === 'lan' ? '私有规则 · 已同步' : state.edited ? '已保存个人编辑' : '自动生成 · 未修改'}`;
   $('save').disabled = state.loading || !state.account || !state.dirty;
-  $('restore').disabled = state.loading || !state.account || !state.edited;
+  $('restore').disabled = state.loading || !state.account || !state.edited || state.client === 'lan';
   for (const id of ['copy', 'download-file', 'download-account', 'refresh']) $(id).disabled = state.loading || !state.account;
-  $('file-origin').textContent = state.edited ? '个人编辑' : '自动生成';
+  $('file-origin').textContent = state.client === 'lan' ? 'SSH 私有' : state.edited ? '个人编辑' : '自动生成';
   $('file-origin').classList.toggle('custom', state.edited);
 }
 function validate() {
@@ -122,7 +123,9 @@ function renderAccounts() {
 }
 async function selectAccount(account) {
   if (state.loading || !confirmDiscard()) return;
-  state.account = account; $('breadcrumb-account').textContent = account.label; $('account-title').textContent = account.label;
+  state.account = account; $('lan-tab').hidden = !account.businessRules;
+  if (state.client === 'lan' && !account.businessRules) { state.client = 'surge'; state.file = 'surge.conf'; }
+  updateClient(); $('breadcrumb-account').textContent = account.label; $('account-title').textContent = account.label;
   $('node-names').textContent = account.nodes.join(' · ');
   $('account-subtitle').textContent = '完整配置尽在此处。选客户端，编辑后保存，或直接下载。';
   $('rules-scope').lastChild.textContent = account.businessRules ? '公共规则 + 个人专项规则' : '公共分流规则';
@@ -135,7 +138,7 @@ async function loadFile() {
     state.baseline = result.content; state.etag = result.etag; state.edited = result.edited;
     monaco.editor.setModelLanguage(editor.getModel(), state.file === 'mihomo.yaml' ? 'yaml' : state.file === 'shadowrocket.txt' ? 'plaintext' : 'proxy-conf');
     editor.setValue(result.content); editor.setPosition({ lineNumber: 1, column: 1 }); editor.revealLine(1);
-    $('language-label').textContent = state.file === 'mihomo.yaml' ? 'YAML' : state.file.endsWith('.conf') ? 'Proxy INI' : 'TEXT';
+    $('language-label').textContent = state.client === 'lan' ? 'DOMAIN RULES' : state.file === 'mihomo.yaml' ? 'YAML' : state.file.endsWith('.conf') ? 'Proxy INI' : 'TEXT';
     validate();
   } catch (error) { state.account = null; editor.setValue(''); toast(error.message, true); }
   finally { setLoading(false); }
@@ -152,7 +155,7 @@ async function save() {
   try {
     const result = await api(fileURL(), { method: 'PUT', body: JSON.stringify({ content: editor.getValue(), etag: state.etag }) });
     state.baseline = result.content; state.etag = result.etag; state.edited = true;
-    toast('编辑已保存，定时生成会保留此文件的个人版本'); return true;
+    toast(state.client === 'lan' ? '内网规则已保存，已同步到你的设备配置' : '编辑已保存，定时生成会保留此文件的个人版本'); return true;
   } catch (error) { toast(error.message, true); return false; }
   finally { setLoading(false); }
 }
