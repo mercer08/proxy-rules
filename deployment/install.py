@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install a localhost backend, then publish validated profile download routes."""
+"""Install private backends and prohibit public profile download routes."""
 import argparse
 import hashlib
 import json
@@ -77,12 +77,14 @@ def insert_https_include(text):
 def prepare(source):
     BASE.mkdir(parents=True, exist_ok=True)
     CONFIG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for name in ["distribute.py", "install.py", "nginx.conf", "config.example.json"]:
+    for name in ["distribute.py", "console.py", "install.py", "nginx.conf", "config.example.json"]:
         if (source / name).resolve() != (BASE / name).resolve():
             shutil.copy2(source / name, BASE / name)
     for name in ["templates", "systemd"]:
         if (source / name).resolve() != (BASE / name).resolve():
             shutil.copytree(source / name, BASE / name, dirs_exist_ok=True)
+    if (source / "console/dist/index.html").is_file() and (source / "console/dist").resolve() != (BASE / "console/dist").resolve():
+        shutil.copytree(source / "console/dist", BASE / "console/dist", dirs_exist_ok=True)
     if not CONFIG.exists():
         atomic_write(CONFIG, (source / "config.example.json").read_bytes())
     config = json.loads(CONFIG.read_text())
@@ -153,17 +155,29 @@ def publish(nginx_site):
         shutil.copy2(BASE / "systemd" / name, Path("/etc/systemd/system") / name)
     run("systemctl", "daemon-reload")
     run("systemctl", "enable", "--now", "proxy-rules-sync.timer", "proxy-profiles-sync.timer")
-    print("Download routes published; localhost Sub-Store API remains private")
+    print("HTTP profile routes closed; SSH-only files and localhost backends remain private")
+
+
+def console():
+    if not (BASE / "console/dist/index.html").is_file():
+        raise ValueError("Build console assets with npm ci && npm run build and upload console/dist first")
+    run("python3", str(BASE / "distribute.py"), "profiles")
+    shutil.copy2(BASE / "systemd/proxy-console.service", "/etc/systemd/system/proxy-console.service")
+    run("systemctl", "daemon-reload")
+    run("systemctl", "enable", "--now", "proxy-console.service")
+    print("Private console: 127.0.0.1:8765, reachable through an SSH local tunnel")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["prepare", "publish"])
+    parser.add_argument("action", choices=["prepare", "publish", "console"])
     parser.add_argument("--nginx-site", type=Path, default=Path("/www/server/panel/vhost/nginx/179.253.248.30.conf"))
     arguments = parser.parse_args()
     if os.geteuid() != 0:
         parser.error("Run on the VPS as root")
     if arguments.action == "prepare":
         prepare(Path(__file__).resolve().parent)
-    else:
+    elif arguments.action == "publish":
         publish(arguments.nginx_site)
+    else:
+        console()

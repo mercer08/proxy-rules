@@ -145,6 +145,9 @@ DMIT 拉取完整版本包并校验 → 解压到新的版本目录 → 校验�
 3x-ui／Sub-Store 继续在 DMIT 处理每个人的节点凭据。规则仓库不需要访问 VPS、面板 API 或订阅内容。
 当前仅分发 DMIT-Native 节点。
 
+还提供仅通过 SSH 隧道访问的私有配置站点：账号选择、Monaco 语法高亮编辑、私有覆盖保存和按人下载。
+编辑器资源部署在 VPS 本地，构建和连接方式见 [部署说明](deployment/README.md)。
+
 ## 来源与许可证
 
 请参阅 [NOTICE.md](NOTICE.md) 和 [LICENSE](LICENSE)。转换保留所选上游发布文件的语义，

@@ -18,6 +18,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  console:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Build locally hosted Monaco resources
+        working-directory: deployment/console
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - name: Install browser
+        working-directory: deployment/console
+        run: npx playwright install --with-deps chromium
+      - name: Validate editor with synthetic account data
+        working-directory: deployment/console
+        run: npm run test:ui
   validate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
