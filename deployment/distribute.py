@@ -2,6 +2,7 @@
 """Mirror validated rule releases and privately render 3x-ui subscriptions."""
 import argparse
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import hashlib
 import io
@@ -256,8 +257,78 @@ def substore(config, account_key, nodes):
 
 def rewrite_rules(fragment, config, digest):
     original = "https://raw.githubusercontent.com/" + config["repository"] + "/release/"
-    replacement = config["public_url"].rstrip("/") + "/proxy-rules/" + digest + "/"
+    replacement = rule_origin(config, digest)
     return fragment.replace(original, replacement)
+
+
+def rule_origin(config, digest):
+    mode = config.get("rules_delivery", "mirror")
+    if mode == "mirror":
+        return config["public_url"].rstrip("/") + "/proxy-rules/" + digest + "/"
+    if mode != "jsdelivr":
+        raise ValueError("Unknown rule delivery mode")
+    tag = config.get("_rules_tag", "")
+    repository = config["repository"]
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+        raise ValueError("Invalid CDN repository")
+    if not re.fullmatch(r"rules-[A-Za-z0-9-]+", tag) or not tag.endswith("-" + digest[:10]):
+        raise ValueError("CDN tag must identify the validated snapshot")
+    return "https://cdn.jsdelivr.net/gh/" + repository + "@" + tag + "/"
+
+
+def verify_cdn(config, rules_dir, digest):
+    """Warm only public rule files, checking each against the validated bundle."""
+    origin = rule_origin(config, digest)
+    files = set()
+    raw = "https://raw.githubusercontent.com/" + config["repository"] + "/release/"
+    for client, filename in (("surge", "rules.conf"), ("mihomo", "rules.yaml"), ("shadowrocket", "rules.conf")):
+        fragment = select_rules((rules_dir / client / filename).read_text(), client)
+        files.update(re.findall(re.escape(raw) + r"([a-z0-9-]+/[a-z0-9-]+\.(?:list|domainset|yaml))", fragment))
+    if not files:
+        raise ValueError("No public CDN rule files found")
+    hashes = json.loads((rules_dir / "manifest.json").read_text())["sha256"]
+
+    def check(filename):
+        if hashlib.sha256(fetch(origin + filename)).hexdigest() != hashes[filename]:
+            raise ValueError("CDN rule checksum mismatch")
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(check, sorted(files)))
+    return len(files)
+
+
+def inline_business_rules(fragment, client, rules_dir):
+    """Keep account-only rules in the private profile, preserving their order."""
+    names = "(?:" + "|".join(sorted(BUSINESS_RULE_SETS)) + ")"
+    if client == "mihomo":
+        def provider(match):
+            name = match.group(1)
+            # The generated business providers have classical, JSON-quoted payloads.
+            payload = (rules_dir / "mihomo" / (name + ".yaml")).read_text()
+            if not payload.startswith("payload:\n"):
+                raise ValueError("Unexpected business rule payload")
+            return "  " + name + ":\n    type: inline\n    behavior: classical\n    payload:\n" + "".join(
+                "    " + line + "\n" for line in payload.splitlines()[1:])
+        return re.sub(r"(?ms)^  (" + names + r"):.*?(?=^  [a-z0-9-]+:\n|^rules:\n|\Z)", provider, fragment)
+
+    def rules(match):
+        name, policy = match.group(1), match.group(2)
+        lines = ["# Account business rule set: " + name]
+        for line in (rules_dir / client / (name + ".list")).read_text().splitlines():
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(",")
+            parts.insert(2, policy)
+            lines.append(",".join(parts))
+        return "\n".join(lines) + "\n"
+    return re.sub(r"(?m)^RULE-SET,[^\n,]*/(" + names + r")\.list,([^,\n]+)\n?", rules, fragment)
+
+
+def prepare_rules(fragment, client, config, rules_dir, digest, business_rules=False):
+    fragment = select_rules(fragment, client, business_rules)
+    if config.get("rules_delivery") == "jsdelivr" and business_rules:
+        fragment = inline_business_rules(fragment, client, rules_dir)
+    return rewrite_rules(fragment, config, digest)
 
 
 def select_rules(fragment, client, business_rules=False):
@@ -274,8 +345,8 @@ def select_rules(fragment, client, business_rules=False):
 def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=False):
     template = Path(config["templates_dir"]) / "shadowrocket.conf"
     text = string.Template(template.read_text()).substitute(MANAGED_URL=managed_url)
-    fragment = select_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", business_rules)
-    return text + rewrite_rules(fragment, config, digest)
+    fragment = prepare_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", config, rules_dir, digest, business_rules)
+    return text + fragment
 
 
 def render_profiles(config, account, converted, token, rules_dir, digest):
@@ -296,16 +367,14 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
     surge = string.Template((templates / "surge.conf").read_text()).substitute(
         common, MANAGED_URL=origin + "/profiles/" + token + "/surge.conf", PROXIES="\n".join(surge_lines))
     business_rules = bool(account.get("business_rules", False))
-    surge_fragment = select_rules((rules_dir / "surge/rules.conf").read_text(), "surge", business_rules)
-    surge += rewrite_rules(surge_fragment, config, digest)
+    surge += prepare_rules((rules_dir / "surge/rules.conf").read_text(), "surge", config, rules_dir, digest, business_rules)
     mihomo_base = json.loads((templates / "mihomo.json").read_text())
     mihomo_base["proxies"] = proxies
     mihomo_base["proxy-groups"] = [{"name": "PROXY", "type": "select", "proxies": names}]
-    fragment = select_rules((rules_dir / "mihomo/rules.yaml").read_text(), "mihomo", business_rules)
-    fragment = rewrite_rules(fragment, config, digest)
+    fragment = prepare_rules((rules_dir / "mihomo/rules.yaml").read_text(), "mihomo", config, rules_dir, digest, business_rules)
     # DNS classifications follow the same ordered domain rules, including custom
     # overrides; do not let a broad domestic set override an explicit proxy set.
-    behaviors = dict(re.findall(r'\n  ([a-z0-9-]+):\n    type: http\n    behavior: (\w+)', fragment))
+    behaviors = dict(re.findall(r'\n  ([a-z0-9-]+):\n    type: (?:http|inline)\n    behavior: (\w+)', fragment))
     dns_policy = {}
     for line in fragment.splitlines():
         if not line.startswith('  - "RULE-SET,'):
@@ -358,6 +427,7 @@ def generate(config):
     state = Path(config["state_dir"])
     rule_state = json.loads((state / "rules.json").read_text())
     digest = rule_state["digest"]
+    config = dict(config, _rules_tag=rule_state["tag"])
     public = Path(config["public_dir"])
     rules_dir = public / "rules/releases" / digest
     accounts = load_accounts(config)
@@ -369,6 +439,13 @@ def generate(config):
     current = state / "profiles.json"
     if current.exists() and json.loads(current.read_text()).get("fingerprint") == fingerprint:
         return
+    if config.get("rules_delivery") == "jsdelivr":
+        cdn_state = state / "cdn-verified.json"
+        expected = {"tag": rule_state["tag"], "digest": digest, "origin": rule_origin(config, digest)}
+        if not cdn_state.exists() or json.loads(cdn_state.read_text()) != expected:
+            count = verify_cdn(config, rules_dir, digest)
+            atomic_write(cdn_state, json.dumps(expected) + "\n")
+            print("Public CDN rules verified: " + str(count))
     token_file = state / "tokens.json"
     tokens = json.loads(token_file.read_text()) if token_file.exists() else {}
     for account in accounts:
