@@ -78,6 +78,25 @@ class ConsoleTests(unittest.TestCase):
             self.assertNotIn('owner', archive.read('surge.conf').decode())
         self.assertEqual(self.request('/api/accounts/' + 'c' * 24 + '/download')[0], 404)
 
+    def test_external_link_can_open_homepage_without_allowing_cross_site_api_access(self):
+        navigation = {'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'navigate',
+                      'Sec-Fetch-Dest': 'document', 'Sec-Fetch-User': '?1'}
+        for path in ('/', '/index.html'):
+            status, body, headers = self.request(path, headers=navigation)
+            self.assertEqual(status, 200)
+            self.assertIn(b'<html>', body)
+            self.assertEqual(headers['X-Frame-Options'], 'DENY')
+        for path in ('/api/accounts', '/api/accounts/' + self.identifier + '/download',
+                     '/api/accounts/' + self.identifier + '/files/surge.conf'):
+            self.assertEqual(self.request(path, headers=navigation)[0], 403)
+        for changed in ({'Sec-Fetch-Dest': 'iframe'}, {'Sec-Fetch-Mode': 'cors'},
+                        {'Sec-Fetch-User': '?0'}, {'Origin': 'https://evil.example'},
+                        {'Host': 'public.example'}):
+            self.assertEqual(self.request('/', headers={**navigation, **changed})[0], 403)
+        self.assertEqual(self.request('/', headers={'Sec-Fetch-Site': 'cross-site'})[0], 403)
+        self.assertEqual(self.request('/api/refresh', 'POST', {}, navigation)[0], 403)
+        self.assertEqual(self.request('/', 'POST', {}, navigation)[0], 403)
+
     def test_edit_conflict_private_persistence_reset_and_failed_generation_rollback(self):
         app = self.server.console
         path = '/api/accounts/' + self.identifier + '/files/surge.conf'
