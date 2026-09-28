@@ -121,6 +121,52 @@ class DistributionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 d.rewrite_rules(source, dict(config, _rules_tag=tag), "a" * 64)
 
+    def test_private_generation_and_single_account_ssh_export(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            digest = "b" * 64
+            rules = state / "rules/releases" / digest
+            for client in ("surge", "shadowrocket", "mihomo"):
+                (rules / client).mkdir(parents=True)
+                (rules / client / ("rules.yaml" if client == "mihomo" else "rules.conf")).write_text(
+                    'rule-providers:\nrules:\n  - "MATCH,PROXY"\n' if client == "mihomo" else "[Rule]\nFINAL,PROXY\n")
+            (state / "rules.json").write_text(json.dumps({"digest": digest, "tag": "rules-now-" + digest[:10]}))
+            config = {"state_dir": str(state), "templates_dir": str(ROOT / "deployment/templates"),
+                      "repository": "mercer08/proxy-rules", "rules_delivery": "jsdelivr",
+                      "public_url": "https://203.0.113.1", "server": "203.0.113.1"}
+            accounts = {name: {"label": name, "nodes": [{"name": "DMIT-Native"}], "business_rules": False} for name in ("owner", "friend")}
+            converted = {"proxies": [{"name": "DMIT-Native", "uuid": "synthetic-secret"}],
+                         "Surge": "DMIT-Native=vmess,203.0.113.1,443,password=synthetic-secret", "URI": "vmess://synthetic"}
+            with patch.object(d, "load_accounts", return_value=accounts), patch.object(d, "substore", return_value=converted), patch.object(d, "verify_cdn", return_value=18):
+                d.generate(config)
+            records = json.loads((state / "profiles.json").read_text())["accounts"]
+            for record in records:
+                self.assertNotIn("links", record)
+                for path in record["files"].values():
+                    file = Path(path)
+                    self.assertEqual(file.stat().st_mode & 0o777, 0o600)
+                    self.assertEqual(file.parent.stat().st_mode & 0o777, 0o700)
+                    self.assertNotIn("/profiles/", file.read_text())
+            self.assertFalse((state / "tokens.json").exists())
+            output = io.BytesIO()
+            d.export_profiles(config, output, "friend")
+            with tarfile.open(fileobj=io.BytesIO(output.getvalue()), mode="r:gz") as exported:
+                self.assertTrue(all(m.name.startswith("friend/") for m in exported.getmembers()))
+                self.assertTrue(all(m.mode == 0o600 for m in exported.getmembers()))
+                self.assertIn(b"synthetic-secret", exported.extractfile("friend/mihomo.yaml").read())
+            with self.assertRaises(ValueError):
+                d.export_profiles(config, io.BytesIO(), "missing")
+            config_file = state / "config.json"
+            config_file.write_text(json.dumps(config))
+            cli_output = io.BytesIO()
+            cli_stream = io.TextIOWrapper(cli_output, encoding="utf-8")
+            with patch.object(d.sys, "argv", ["distribute.py", "export", "--config", str(config_file), "--account", "friend"]), patch.object(d.sys, "stdout", cli_stream), patch.object(d, "generate"):
+                d.main()
+            cli_stream.flush()
+            with tarfile.open(fileobj=io.BytesIO(cli_output.getvalue()), mode="r:gz") as exported:
+                self.assertEqual(len(exported.getmembers()), 6)
+                self.assertTrue(all(m.name.startswith("friend/") for m in exported.getmembers()))
+
     def test_cdn_verification_rejects_tampering_and_never_fetches_business_rules(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -230,7 +276,10 @@ rules:
                 dns = json.loads(next(line.split(": ", 1)[1] for line in rendered["mihomo.yaml"].splitlines() if line.startswith('"dns":')))
                 self.assertEqual("+.internal.business.test" in dns["fake-ip-filter"], enabled)
                 self.assertIn("+.localnet.test", dns["fake-ip-filter"])
-                self.assertIn("/profiles/" + "a" * 48 + "/shadowrocket.conf", rendered["shadowrocket.conf"])
+                self.assertNotIn("update-url", rendered["shadowrocket.conf"])
+                self.assertNotIn("#!MANAGED-CONFIG", rendered["surge.conf"])
+                self.assertNotIn("/profiles/", rendered["surge.conf"])
+                self.assertEqual(rendered["node.txt"], "vmess://synthetic\n")
             shared = d.render_shadowrocket(config, root, "b" * 64, "https://203.0.113.1/proxy-config/shadowrocket.conf")
             self.assertTrue(all(name not in shared for name in d.BUSINESS_RULE_SETS))
             cdn_config = dict(config, rules_delivery="jsdelivr", _rules_tag="rules-now-" + "b" * 10)
