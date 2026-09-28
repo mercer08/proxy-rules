@@ -163,10 +163,20 @@ class Handler(BaseHTTPRequestHandler):
             host = self.headers.get('Host', '')
             if not re.fullmatch(r'(?:127\.0\.0\.1|localhost)(?::[0-9]{1,5})?', host):
                 raise ConsoleError(403, '请通过本机 SSH 隧道访问')
-            origin = self.headers.get('Origin')
-            if origin and origin != 'http://' + host or self.headers.get('Sec-Fetch-Site') == 'cross-site':
-                raise ConsoleError(403, '仅允许本站请求')
             path = unquote(urlsplit(self.path).path)
+            origin = self.headers.get('Origin')
+            # Clicking a link from another site is a legitimate entry to the
+            # static shell. Never extend this exception to profile APIs.
+            homepage_navigation = (
+                method == 'GET' and path in ('/', '/index.html')
+                and self.headers.get('Sec-Fetch-Mode') == 'navigate'
+                and self.headers.get('Sec-Fetch-Dest') == 'document'
+                and self.headers.get('Sec-Fetch-User') == '?1'
+            )
+            if (origin and origin != 'http://' + host) or (
+                self.headers.get('Sec-Fetch-Site') == 'cross-site' and not homepage_navigation
+            ):
+                raise ConsoleError(403, '仅允许本站请求')
             app = self.server.console
             if path.startswith('/api/'):
                 with app.lock():

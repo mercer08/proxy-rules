@@ -1,5 +1,20 @@
 import { test, expect } from '@playwright/test';
 
+test('a user click from another site opens the console and its same-origin API', async ({ page }) => {
+  await page.goto('http://localhost:8766/');
+  await page.setContent('<a href="http://127.0.0.1:8766/">Open console</a>');
+  const navigation = page.waitForRequest(request =>
+    request.isNavigationRequest() && request.url() === 'http://127.0.0.1:8766/');
+  await page.getByRole('link', { name: 'Open console' }).click();
+  const headers = await (await navigation).allHeaders();
+  expect(headers['sec-fetch-site']).toBe('cross-site');
+  expect(headers['sec-fetch-mode']).toBe('navigate');
+  expect(headers['sec-fetch-dest']).toBe('document');
+  expect(headers['sec-fetch-user']).toBe('?1');
+  await expect(page.locator('#account-title')).toHaveText('我的电脑');
+  await expect(page.locator('.monaco-editor')).toBeVisible();
+});
+
 test('select clients, highlight, edit, preserve, restore, download and use mobile layout', async ({ page }, testInfo) => {
   const errors = [], requests = [];
   page.on('pageerror', error => errors.push(error.message));
