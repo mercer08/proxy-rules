@@ -1,0 +1,25 @@
+[Unit]
+Description=Private Sub-Store node conversion backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=proxy-substore
+WorkingDirectory=/var/lib/sub-store
+ExecStart=/opt/proxy-distribution/node-v24.15.0-linux-x64/bin/node /opt/proxy-distribution/sub-store.bundle.js
+Environment=SUB_STORE_BACKEND_API_HOST=127.0.0.1
+Environment=SUB_STORE_BACKEND_API_PORT=3000
+Environment=SUB_STORE_DATA_BASE_PATH=/var/lib/sub-store
+Restart=on-failure
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sub-store
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

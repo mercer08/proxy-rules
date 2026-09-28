@@ -1,0 +1,14 @@
+[Unit]
+Description=Verify and mirror proxy-rules release
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/proxy-distribution/distribute.py rules
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/proxy-distribution /var/www/proxy-distribution

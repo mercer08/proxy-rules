@@ -19,7 +19,10 @@
 | Mihomo | [rules.yaml](https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/rules.yaml) | [rules-ads.yaml](https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/rules-ads.yaml) |
 | Shadowrocket | [rules.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/shadowrocket/rules.conf) | [rules-ads.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/shadowrocket/rules-ads.conf) |
 
-Mihomo 片段通过现有 `PROXY` 下载规则。首次使用时应确保该节点可用；也可以由 DMIT 镜像规则并改写下载 URL。
+上表是原始规则片段。完整个人订阅由 [deployment](deployment/README.md) 生成：公共规则使用
+固定发布标签的 jsDelivr URL，Mihomo 经 DIRECT 下载；业务专项规则仅在允许的个人配置里嵌入。
+GitHub Actions 发布后预热并校验 CDN 公共文件，DMIT 对首次采用的版本再次校验。
+jsDelivr 支持 GitHub 文件自动缓存，但其 Near China 网络不保证所有大陆线路可达。
 Surge 及 Shadowrocket 的下载方式应在完整配置中设置。不要把 GitHub 登录令牌放进分发给朋友的配置。
 
 完整下载包及可回滚版本见 [Releases](https://github.com/mercer08/proxy-rules/releases)。
@@ -131,6 +134,10 @@ shasum -a 256 -c checksums.sha256
 首次接入完整配置时应在实际设备上验证，尤其是 DNS、下载路径和 UDP 行为。
 
 ## 与 DMIT / Sub-Store 串联
+
+已提供可部署的 [DMIT 分发脚本与客户端模板](deployment/README.md)，包含校验镜像、
+只读读取 3x-ui 账号、本机 Sub-Store 转换、个人链接生成、Nginx 下载路径和 systemd 更新任务。
+敏感账号清单和访问令牌在 VPS 私有目录生成，不属于 GitHub 发布产物。
 
 DMIT 拉取完整版本包并校验 → 解压到新的版本目录 → 校验通过后切换规则镜像目录
 → 客户端模板引用镜像规则。

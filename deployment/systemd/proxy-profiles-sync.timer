@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh profiles after account or rule changes
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target
