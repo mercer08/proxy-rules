@@ -1,0 +1,15 @@
+[Unit]
+Description=Generate private client profiles from 3x-ui
+After=sub-store.service
+Requires=sub-store.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/proxy-distribution/distribute.py profiles
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/x-ui
+ReadWritePaths=/var/lib/proxy-distribution /var/www/proxy-distribution
