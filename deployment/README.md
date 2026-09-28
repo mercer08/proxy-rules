@@ -13,7 +13,8 @@ GitHub Actions 发布固定标签 → jsDelivr 缓存公共规则 → DMIT 校�
 只有 `business_rule_accounts` 允许的账号嵌入业务专项规则；其他账号不包含这些覆盖。
 这不会删除已经公开的 Git 历史或内部域名。
 
-当前仅映射 `dmit-direct` 为 `DMIT-Native`，数据库以只读方式打开。
+当前仅映射 `dmit-direct` 为 `dmit-lax`，数据库以只读方式打开。
+Shadowrocket 的策略组按该账号导出的实际节点名生成，不再把节点名写死在模板中。
 启用、到期和入站关联均在生成时检查；额度仍由 Xray/3x-ui 执行，导出不会重置流量。
 
 ## 部署

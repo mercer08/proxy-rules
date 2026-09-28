@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import re
 import sqlite3
 import sys
 import tarfile
@@ -255,6 +256,14 @@ rules:
             self.assertIn("block-quic = always-allow", rendered["surge.conf"])
             self.assertNotIn("block-quic=on", rendered["surge.conf"])
             self.assertIn("block-quic = always-allow", rendered["shadowrocket.conf"])
+            renamed = dict(converted, proxies=[dict(node, name="dmit-lax")],
+                           Surge=converted["Surge"].replace("DMIT-Native", "dmit-lax"))
+            renamed_profile = d.render_profiles(config, {}, renamed, "a" * 48, root, "b" * 64)
+            group = next(line for line in renamed_profile["shadowrocket.conf"].splitlines() if line.startswith("PROXY ="))
+            matcher = group.split("policy-regex-filter=", 1)[1].split(",", 1)[0]
+            self.assertIsNotNone(re.fullmatch(matcher, "dmit-lax"))
+            self.assertIsNone(re.fullmatch(matcher, "DMIT-Native"))
+            self.assertIn("policy-select-name=dmit-lax", group)
 
     def test_business_rules_are_account_scoped_in_all_clients_and_dns(self):
         with tempfile.TemporaryDirectory() as temporary:

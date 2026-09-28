@@ -367,9 +367,15 @@ def select_rules(fragment, client, business_rules=False):
     return re.sub(r"(?m)^RULE-SET,[^\n,]*/" + names + r"\.list,[^\n]*\n?", "", fragment)
 
 
-def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=False):
+def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=False, proxy_names=None):
     template = Path(config["templates_dir"]) / "shadowrocket.conf"
-    text = string.Template(template.read_text()).substitute(MANAGED_URL="")
+    if proxy_names is None:
+        proxy_names = [inbound["name"] for inbound in config.get("inbounds", {}).values()]
+    options = ""
+    if proxy_names:
+        pattern = "^(?:" + "|".join(re.escape(name) for name in proxy_names) + ")$"
+        options = ", policy-regex-filter=" + pattern + ", policy-select-name=" + proxy_names[0]
+    text = string.Template(template.read_text()).substitute(MANAGED_URL="", PROXY_GROUP_OPTIONS=options)
     text = re.sub(r"(?m)^update-url\s*=.*\n?", "", text)
     fragment = prepare_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", config, rules_dir, digest, business_rules)
     return text + fragment
@@ -458,7 +464,7 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
             "shadowrocket.txt": base64.b64encode(("\n".join(uris) + "\n").encode()).decode() + "\n",
             "node.txt": "\n".join(uris) + "\n",
             "shadowrocket.conf": render_shadowrocket(
-                config, rules_dir, digest, origin + "/profiles/" + token + "/shadowrocket.conf", business_rules)}
+                config, rules_dir, digest, origin + "/profiles/" + token + "/shadowrocket.conf", business_rules, names)}
 
 
 def generate(config):
