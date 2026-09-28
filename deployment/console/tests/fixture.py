@@ -20,13 +20,16 @@ for client in ('surge', 'shadowrocket', 'mihomo'):
 (state / 'rules.json').write_text(json.dumps({'digest': digest, 'tag': 'rules-now-' + digest[:10]}))
 config = {'state_dir': str(state), 'templates_dir': str(BASE / 'templates'), 'repository': 'mercer08/proxy-rules',
           'rules_delivery': 'jsdelivr', 'public_url': 'https://203.0.113.1', 'server': '203.0.113.1'}
-accounts = {name: {'label': label, 'nodes': [{'name': 'DMIT-Native'}], 'business_rules': False}
+accounts = {name: {'label': label, 'nodes': [{'name': 'dmit-lax' if name == 'owner' else 'dmit-fixture-friend'}], 'business_rules': False}
             for name, label in (('owner', '我的电脑'), ('friend', '演示账号'))}
 c.d.load_accounts = lambda config: accounts
 c.d.verify_cdn = lambda *args: 0
 def converted(config, key, nodes):
-    return {'proxies': [{'name': 'DMIT-Native', 'type': 'vmess', 'server': '203.0.113.1', 'port': 443, 'uuid': 'synthetic-' + key, 'tls': True}],
-            'Surge': 'DMIT-Native=vmess,203.0.113.1,443,username=synthetic-' + key + ',tls=true',
+    name = nodes[0]['name']
+    return {'proxies': [{'name': name, 'type': 'vmess', 'server': '203.0.113.1', 'port': 443, 'uuid': 'synthetic-' + key, 'tls': True,
+                         'alterId': 0, 'cipher': 'aes-128-gcm', 'network': 'ws', 'udp': True, 'skip-cert-verify': False,
+                         'ws-opts': {'path': '/synthetic-ws', 'headers': {'Host': '203.0.113.1'}}}],
+            'Surge': name + '=vmess,203.0.113.1,443,username=synthetic-' + key + ',tls=true',
             'URI': 'vmess://c3ludGhldGljLXRlc3Qtb25seQ=='}
 c.d.substore = converted
 c.d.generate(config)

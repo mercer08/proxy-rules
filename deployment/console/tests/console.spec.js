@@ -12,6 +12,7 @@ test('a user click from another site opens the console and its same-origin API',
   expect(headers['sec-fetch-dest']).toBe('document');
   expect(headers['sec-fetch-user']).toBe('?1');
   await expect(page.locator('#account-title')).toHaveText('我的电脑');
+  await expect(page.locator('#node-names')).toHaveText('dmit-lax');
   await expect(page.locator('.monaco-editor')).toBeVisible();
 });
 
@@ -55,6 +56,7 @@ test('select clients, highlight, edit, preserve, restore, download and use mobil
   await page.locator('#search').fill('演示');
   await page.locator('.account').click();
   await expect(page.locator('#account-title')).toHaveText('演示账号');
+  await expect(page.locator('#node-names')).toHaveText('dmit-fixture-friend');
   await page.locator('#search').fill('');
   await page.getByRole('button', { name: '切换深色主题' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');

@@ -29,7 +29,45 @@ def archive(files):
     return buffer.getvalue()
 
 
+def vmess_node(name="DMIT-Native", uuid="synthetic-secret"):
+    return {"name": name, "type": "vmess", "server": "203.0.113.1", "port": 443,
+            "uuid": uuid, "alterId": 0, "cipher": "aes-128-gcm", "network": "ws",
+            "tls": True, "skip-cert-verify": False, "udp": True,
+            "ws-opts": {"path": "/test-ws", "headers": {"Host": "203.0.113.1"}}}
+
+
 class DistributionTests(unittest.TestCase):
+    def test_shadowrocket_contains_complete_account_node(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "shadowrocket").mkdir()
+            (root / "shadowrocket/rules.conf").write_text("[Rule]\nFINAL,PROXY\n")
+            node = {"name": "dmit-lax", "type": "vmess", "server": "203.0.113.1", "port": 443,
+                    "uuid": "00000000-0000-4000-8000-000000000001", "alterId": 0,
+                    "cipher": "aes-128-gcm", "network": "ws", "tls": True,
+                    "skip-cert-verify": False, "udp": True,
+                    "ws-opts": {"path": "/test-ws", "headers": {"Host": "203.0.113.1"}}}
+            config = {"templates_dir": str(ROOT / "deployment/templates"),
+                      "repository": "mercer08/proxy-rules", "public_url": "https://203.0.113.1"}
+            profile = d.render_shadowrocket(config, root, "b" * 64, "", proxies=[node])
+            self.assertIn("[Proxy]\n", profile)
+            line = next(line for line in profile.splitlines() if line.startswith("dmit-lax ="))
+            parts = [part.strip() for part in line.split("=", 1)[1].split(",")]
+            self.assertEqual(parts[:3], ["vmess", node["server"], str(node["port"])])
+            options = dict(part.split("=", 1) for part in parts[3:])
+            self.assertEqual(options["password"], node["uuid"])
+            self.assertEqual(options["method"], node["cipher"])
+            self.assertEqual(options["alterId"], "0")
+            self.assertEqual(options["obfs"], "websocket")
+            self.assertEqual(options["obfs-host"], node["ws-opts"]["headers"]["Host"])
+            self.assertEqual(options["obfs-uri"], node["ws-opts"]["path"])
+            self.assertEqual(options["peer"], node["server"])
+            self.assertEqual(options["tls"], "true")
+            self.assertEqual(options["skip-cert-verify"], "false")
+            self.assertEqual(options["udp"], "1")
+            self.assertIn("PROXY = select,dmit-lax", profile)
+            self.assertNotIn("policy-regex-filter", profile)
+
     def bundle(self):
         files = {"surge/rules.conf": b"[Rule]\nFINAL,PROXY\n",
                  "mihomo/rules.yaml": b"rules:\n - MATCH,PROXY\n",
@@ -136,7 +174,7 @@ class DistributionTests(unittest.TestCase):
                       "repository": "mercer08/proxy-rules", "rules_delivery": "jsdelivr",
                       "public_url": "https://203.0.113.1", "server": "203.0.113.1"}
             accounts = {name: {"label": name, "nodes": [{"name": "DMIT-Native"}], "business_rules": False} for name in ("owner", "friend")}
-            converted = {"proxies": [{"name": "DMIT-Native", "uuid": "synthetic-secret"}],
+            converted = {"proxies": [vmess_node()],
                          "Surge": "DMIT-Native=vmess,203.0.113.1,443,password=synthetic-secret", "URI": "vmess://synthetic"}
             with patch.object(d, "load_accounts", return_value=accounts), patch.object(d, "substore", return_value=converted), patch.object(d, "verify_cdn", return_value=18):
                 d.generate(config)
@@ -237,7 +275,7 @@ rules:
   - "RULE-SET,direct,DIRECT"
   - "MATCH,PROXY"
 ''')
-            node = {"name": "DMIT-Native", "server": "203.0.113.1"}
+            node = vmess_node()
             converted = {"proxies": [node],
                          "Surge": 'DMIT-Native=vmess,203.0.113.1,443,ws-headers="Host:"203.0.113.1"",vmess-aead=true,tls=true',
                          "URI": "vmess://synthetic"}
@@ -255,6 +293,13 @@ rules:
             self.assertIn("block-quic = always-allow", rendered["surge.conf"])
             self.assertNotIn("block-quic=on", rendered["surge.conf"])
             self.assertIn("block-quic = always-allow", rendered["shadowrocket.conf"])
+            renamed = dict(converted, proxies=[dict(node, name="dmit-lax")],
+                           Surge=converted["Surge"].replace("DMIT-Native", "dmit-lax"))
+            renamed_profile = d.render_profiles(config, {}, renamed, "a" * 48, root, "b" * 64)
+            group = next(line for line in renamed_profile["shadowrocket.conf"].splitlines() if line.startswith("PROXY ="))
+            self.assertEqual(group.split(",")[1], "dmit-lax")
+            self.assertNotIn("DMIT-Native", group)
+            self.assertIn("policy-select-name=dmit-lax", group)
 
     def test_business_rules_are_account_scoped_in_all_clients_and_dns(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -278,7 +323,7 @@ rules:
             rules = "rules:\n" + "".join('  - "RULE-SET,' + name + ',' +
                 ("DIRECT" if name in ("private", "lan-com") else "PROXY") + '"\n' for name in names)
             (root / "mihomo/rules.yaml").write_text(providers + rules + '  - "MATCH,PROXY"\n')
-            converted = {"proxies": [{"name": "DMIT-Native"}], "Surge": "DMIT-Native=vmess,203.0.113.1,443,tls=true", "URI": "vmess://synthetic"}
+            converted = {"proxies": [vmess_node()], "Surge": "DMIT-Native=vmess,203.0.113.1,443,tls=true", "URI": "vmess://synthetic"}
             config = {"templates_dir": str(ROOT / "deployment/templates"), "server": "203.0.113.1",
                       "public_url": "https://203.0.113.1", "repository": "mercer08/proxy-rules"}
             for enabled in (False, True):
