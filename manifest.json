@@ -1,13 +1,13 @@
 {
   "advertising_enabled_by_default": false,
-  "content_digest": "0dce01b5b0c8ffee47200aaed7785348da1c8b33924833a48143511dfe2a3d7c",
+  "content_digest": "7c32b65ebf6b3afab4e9293586216db78a28fc0f2ebe5d1037c5f2a2730ec83d",
   "counts": {
     "cn": 9612,
     "direct": 111353,
     "lan": 18,
     "private": 130,
     "proxy": 27102,
-    "reject": 192363,
+    "reject": 192682,
     "telegram": 12
   },
   "custom_counts": {
@@ -24,7 +24,7 @@
     "lancidr.txt": "82920b241dc328f1dc99849cf733ed8675a00a4ee0bdf64c892b332dfb7e1e2e",
     "private.txt": "3a04b128200ef8097d73b1496cbb23d24bc1e05d42fffb09f07c51699efb00b2",
     "proxy.txt": "baac2216ca9ff580cbf4405b2fe1c471ad3b2d47cedca8f6f948bc9d9ea6c967",
-    "reject.txt": "af433fb16fde1bff3faba389d17341e37fe216d017a8b7b832eb2a82402fc99e",
+    "reject.txt": "94af8a7114a1aa77f408694aa6463ccc967ef43cd9a39e4c3595a4e34d47555d",
     "telegramcidr.txt": "328fca88c675763111c7f7585ec504e5c21ab9afb7a8ce6df33b7ac01b8a3ee0"
   },
   "ip_families": {
@@ -56,7 +56,7 @@
     "mihomo/lan.yaml": "e5235a9cdff4ce7a3e01dc6c365b696562a449ec5d913727769f659dff644825",
     "mihomo/private.yaml": "b3bad68dc66f0629e42bc16340c77555130f0a20ed28fb3f549e9e600b9acaa9",
     "mihomo/proxy.yaml": "933200db9aefba5236103567e959107e181e690af85c39c2ef2ba397f76684d7",
-    "mihomo/reject.yaml": "7bfdd288b10273642ecc76a4939de4b29db1733f6b3ef4974a2c2115b5b4cec2",
+    "mihomo/reject.yaml": "f46c4858330cb16dcae66b87d734d13df2a526b59dedba95107b6e5c168da247",
     "mihomo/rules-ads.yaml": "1499164114f5bc80f8022a1f432006c84be3e0e0762d707955684126830523f1",
     "mihomo/rules.yaml": "eb553c224459e209d152894a628367a812d71ea68b1fe975a179b16f4c337008",
     "mihomo/telegram.yaml": "8468e572889c5d55e7dbf398b2666f0237d5a327d6e4b51352a76f6f26b25333",
@@ -71,7 +71,7 @@
     "shadowrocket/lan.list": "8ab8507a3a09bbb3c9ff1c3e8f8fc83b913d260874cfe4475cd76421803bfaec",
     "shadowrocket/private.list": "5fb8cd14179ddf9996c63e887ae072d84fa7f2029fd3926633c5bd7482fd70f1",
     "shadowrocket/proxy.list": "bb0d1a5e4d432d537d774df6c8f8cb351ac133d86ff0ade9fab7f674a987932a",
-    "shadowrocket/reject.list": "4bc62bc138e0fa4ebfc045f83afdfdfd3918c0d8b9dd54962e18226266b7b104",
+    "shadowrocket/reject.list": "81731e56551a76b0e02badfbec1c5b25b46a4558777f55092ca4fc45e5ab89e9",
     "shadowrocket/rules-ads.conf": "937c3ba8d85dd2ff0479b53e5ff12c71bef4c1f21f740ecef397367f782d2852",
     "shadowrocket/rules.conf": "da522bd0253f2e1e631e1c6f5a0a58d7ba8301118d96edd598cb147cac3434b9",
     "shadowrocket/telegram.list": "d331ac1fac619df933a563115a00998fbe15ef83c0b526a2794c49482fb02417",
@@ -89,8 +89,8 @@
     "surge/private.list": "5fb8cd14179ddf9996c63e887ae072d84fa7f2029fd3926633c5bd7482fd70f1",
     "surge/proxy.domainset": "0bc461561583604138e75806560cf2add77269a556127c5ef0a59a01ba867d9f",
     "surge/proxy.list": "bb0d1a5e4d432d537d774df6c8f8cb351ac133d86ff0ade9fab7f674a987932a",
-    "surge/reject.domainset": "634977bd7bba9f9337d80f650541ca2965308ed520c94e794c9879382a9a1e4e",
-    "surge/reject.list": "4bc62bc138e0fa4ebfc045f83afdfdfd3918c0d8b9dd54962e18226266b7b104",
+    "surge/reject.domainset": "17d269b965f589d36dc1cb8f12860e9a8eb591f7f28af772417f3895c4359e11",
+    "surge/reject.list": "81731e56551a76b0e02badfbec1c5b25b46a4558777f55092ca4fc45e5ab89e9",
     "surge/rules-ads.conf": "83a7efd2d6070329ae2f5c85531c16bfa7b04ee9145465b58ca3c45260e2fb60",
     "surge/rules.conf": "f8432f1556a45dcd1e7f4b137122f9c8676dd30d906118c37efe0e0fb89b47e2",
     "surge/telegram.list": "d331ac1fac619df933a563115a00998fbe15ef83c0b526a2794c49482fb02417",
@@ -98,7 +98,7 @@
   },
   "upstream": {
     "branch": "release",
-    "commit": "ca151efd8acc08917927968081af4a439b667945",
+    "commit": "62ffed3c33492faee653d6c54e0ed39139fe3c6c",
     "repository": "Loyalsoldier/clash-rules"
   }
 }
