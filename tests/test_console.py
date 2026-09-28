@@ -1,0 +1,101 @@
+import contextlib
+import hashlib
+import http.client
+import importlib.util
+import io
+import json
+from pathlib import Path
+import sys
+import tempfile
+import threading
+import unittest
+from unittest.mock import patch
+import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'deployment'))
+import console as c
+
+
+class ConsoleTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.state = Path(self.temp.name)
+        self.identifier = 'a' * 24
+        self.other = 'b' * 24
+        self.records = []
+        for identifier, label in ((self.identifier, 'owner'), (self.other, 'friend')):
+            folder = self.state / 'profiles/generations/test' / identifier
+            folder.mkdir(parents=True)
+            files = {}
+            for name in c.d.PROFILE_FILES:
+                (folder / name).write_text('[Rule]\nFINAL,PROXY\n' + label)
+                files[name] = str(self.state / 'profiles/current' / identifier / name)
+            self.records.append({'label': label, 'business_rules': label == 'owner', 'nodes': ['DMIT-Native'], 'files': files, 'edited': []})
+        (self.state / 'profiles/current').symlink_to(self.state / 'profiles/generations/test')
+        (self.state / 'profiles.json').write_text(json.dumps({'accounts': self.records}))
+        self.assets = self.state / 'assets'
+        self.assets.mkdir()
+        (self.assets / 'index.html').write_text('<html>test</html>')
+        self.server = c.serve({'state_dir': str(self.state)}, self.assets, 0)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.port = self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join()
+        self.temp.cleanup()
+
+    def request(self, path, method='GET', body=None, headers=None):
+        connection = http.client.HTTPConnection('127.0.0.1', self.port)
+        values = {'Content-Type': 'application/json', **(headers or {})}
+        connection.request(method, path, json.dumps(body) if body is not None else None, values)
+        response = connection.getresponse()
+        result = response.status, response.read(), dict(response.getheaders())
+        connection.close()
+        return result
+
+    def test_loopback_only_origin_guards_and_no_cache(self):
+        self.assertEqual(self.server.server_address[0], '127.0.0.1')
+        status, body, headers = self.request('/api/accounts')
+        self.assertEqual(status, 200)
+        self.assertEqual(len(json.loads(body)['accounts']), 2)
+        self.assertEqual(headers['Cache-Control'], 'no-store')
+        self.assertEqual(headers['X-Frame-Options'], 'DENY')
+        for values in ({'Host': 'public.example'}, {'Origin': 'https://evil.example'}, {'Sec-Fetch-Site': 'cross-site'}):
+            self.assertEqual(self.request('/api/accounts', headers=values)[0], 403)
+        self.assertEqual(self.request('/../profiles.json')[0], 404)
+        self.assertEqual(self.request('/api/accounts/' + self.identifier + '/files/profiles.json')[0], 404)
+
+    def test_account_package_is_scoped_and_unknown_account_is_rejected(self):
+        status, body, _ = self.request('/api/accounts/' + self.other + '/download')
+        self.assertEqual(status, 200)
+        with zipfile.ZipFile(io.BytesIO(body)) as archive:
+            self.assertEqual(len(archive.namelist()), 6)
+            self.assertIn('friend', archive.read('surge.conf').decode())
+            self.assertNotIn('owner', archive.read('surge.conf').decode())
+        self.assertEqual(self.request('/api/accounts/' + 'c' * 24 + '/download')[0], 404)
+
+    def test_edit_conflict_private_persistence_reset_and_failed_generation_rollback(self):
+        app = self.server.console
+        path = '/api/accounts/' + self.identifier + '/files/surge.conf'
+        original = json.loads(self.request(path)[1])
+        with patch.object(app, 'regenerate') as regenerate:
+            self.assertEqual(self.request(path, 'PUT', {'content': 'edit', 'etag': 'stale'})[0], 409)
+            self.assertEqual(self.request(path, 'PUT', {'content': '#!MANAGED-CONFIG https://example.com', 'etag': original['etag']})[0], 400)
+            self.assertEqual(self.request(path, 'PUT', {'content': 'edit', 'etag': original['etag']})[0], 200)
+            regenerate.assert_called_once()
+        override = self.state / 'profile-overrides' / self.identifier / 'surge.conf'
+        self.assertEqual(override.read_text(), 'edit')
+        self.assertEqual(override.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(override.parent.stat().st_mode & 0o777, 0o700)
+        with patch.object(app, 'regenerate', side_effect=RuntimeError('do not expose payload')):
+            status, body, _ = self.request(path, 'PUT', {'content': 'bad', 'etag': original['etag']})
+            self.assertEqual(status, 503)
+            self.assertNotIn(b'payload', body)
+            self.assertEqual(override.read_text(), 'edit')
+        with patch.object(app, 'regenerate'):
+            self.assertEqual(self.request(path, 'DELETE', {'etag': original['etag']})[0], 200)
+        self.assertFalse(override.exists())

@@ -67,6 +67,38 @@ SSH 限制的是服务器下载渠道。分享出的文件包含节点凭据，�
 
 ## 更新与维护
 
+### 私有配置站点
+
+站点使用本地 Monaco 0.57.0，无需浏览器加载外部编辑器脚本。选择账号后可切换客户端、
+查看语法高亮、复制、保存个人编辑、恢复自动生成版本，以及下载当前文件或此账号的 ZIP。
+YAML 提供语法检查；Surge/Shadowrocket 的导入行为仍需客户端验证。
+
+先在开发电脑构建并把 dist 上传到 VPS 的 `/opt/proxy-distribution/console/dist`：
+
+```bash
+cd deployment/console
+npm ci --ignore-scripts
+npm run build
+# 上传 console.py、distribute.py、install.py、systemd 和 console/dist 后，在 VPS 执行：
+python3 /opt/proxy-distribution/install.py console
+```
+
+服务仅绑定 `127.0.0.1:8765`，不配置 Nginx 转发、不开放防火墙端口、不增加登录认证。
+在自己的电脑建立 SSH 本地隧道，然后访问 `http://127.0.0.1:8765`：
+
+```bash
+ssh -N -L 127.0.0.1:8765:127.0.0.1:8765 root@VPS_IP
+```
+
+保存的文件覆盖位于私有 `profile-overrides/<账号目录>/<文件名>`。
+覆盖整份文件：规则或模板更新时该个人文件仍保持编辑后的版本，点击“恢复默认”才重新采用自动生成版本。
+其余文件正常更新。SSH CLI 导出和站点下载采用同一份当前配置。
+保存检查文件内容摘要，服务器版本变化时拒绝覆盖并提示重新加载；生成失败则恢复原覆盖文件。
+浏览器不把账号配置存入 localStorage，仅记忆深色/浅色主题。
+
+维护服务：`systemctl status proxy-console`，更新资源和脚本后执行 `systemctl restart proxy-console`。
+测试可用 `npm run test:ui`；本地 macOS 使用已安装的 Chrome，Linux 需先安装 Playwright Chromium。
+
 Actions 在北京时间每天 08:17、main 更新和手动触发时发布规则。
 VPS 每小时检查规则版本、每两分钟检查私有配置变化。新固定版本需要重新通过 SSH
 下载完整配置并导入，离线配置不会自动切换到新版本。
