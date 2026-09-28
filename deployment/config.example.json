@@ -12,7 +12,6 @@
   "web_group": "www",
   "business_rule_accounts": [],
   "inbounds": {
-    "dmit-direct": {"name": "DMIT-Native", "udp": false},
-    "dmit-warp": {"name": "DMIT-WARP", "udp": false}
+    "dmit-direct": {"name": "DMIT-Native", "udp": false}
   }
 }
