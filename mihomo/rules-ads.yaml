@@ -16,14 +16,6 @@ rule-providers:
     path: ./ruleset/lan.yaml
     interval: 86400
     proxy: PROXY
-  lan-com:
-    type: http
-    behavior: classical
-    format: yaml
-    url: "https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/lan-com.yaml"
-    path: ./ruleset/lan-com.yaml
-    interval: 86400
-    proxy: PROXY
   wan-com:
     type: http
     behavior: classical
@@ -83,7 +75,6 @@ rule-providers:
 rules:
   - "RULE-SET,private,DIRECT"
   - "RULE-SET,lan,DIRECT,no-resolve"
-  - "RULE-SET,lan-com,DIRECT"
   - "RULE-SET,wan-com,PROXY"
   - "RULE-SET,futu-broker,PROXY"
   - "RULE-SET,reject,REJECT"
