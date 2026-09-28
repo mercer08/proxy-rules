@@ -29,6 +29,19 @@ def archive(files):
 
 
 class DistributionTests(unittest.TestCase):
+    def test_proxy_quic_block_preserves_direct_and_rule_order(self):
+        fragment = 'rules:\n  - "DOMAIN-SUFFIX,cn,DIRECT"\n  - "RULE-SET,proxy,PROXY"\n  - "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve"\n  - "MATCH,PROXY"\n'
+        result = d.block_mihomo_proxy_quic(fragment)
+        rules = [json.loads(line.strip()[2:]) for line in result.splitlines() if line.startswith('  - ')]
+        self.assertEqual(rules, [
+            'DOMAIN-SUFFIX,cn,DIRECT',
+            'AND,((NETWORK,UDP),(DST-PORT,443),(RULE-SET,proxy)),REJECT',
+            'RULE-SET,proxy,PROXY',
+            'IP-CIDR,10.0.0.0/8,DIRECT,no-resolve',
+            'AND,((NETWORK,UDP),(DST-PORT,443)),REJECT',
+            'MATCH,PROXY',
+        ])
+
     def bundle(self):
         files = {"surge/rules.conf": b"[Rule]\nFINAL,PROXY\n",
                  "mihomo/rules.yaml": b"rules:\n - MATCH,PROXY\n",

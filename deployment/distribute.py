@@ -375,6 +375,23 @@ def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=F
     return text + fragment
 
 
+def block_mihomo_proxy_quic(fragment):
+    """Reject UDP/443 at each proxy rule, preserving earlier direct rules."""
+    lines = []
+    for line in fragment.splitlines():
+        if line.startswith('  - "'):
+            rule = json.loads(line.strip()[2:])
+            parts = rule.split(',')
+            if len(parts) >= 2 and parts[-1] == "PROXY":
+                match = ','.join(parts[:-1])
+                conditions = '(NETWORK,UDP),(DST-PORT,443)'
+                if match != "MATCH":
+                    conditions += ',(' + match + ')'
+                lines.append('  - ' + json.dumps('AND,(' + conditions + '),REJECT'))
+        lines.append(line)
+    return '\n'.join(lines) + '\n'
+
+
 def render_profiles(config, account, converted, token, rules_dir, digest):
     templates = Path(config["templates_dir"])
     origin = config["public_url"].rstrip("/")
@@ -434,6 +451,7 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
     # allows the already-validated YAML rule fragment to be appended unchanged.
     mihomo = "\n".join(json.dumps(key) + ": " + json.dumps(value, ensure_ascii=False) for key, value in mihomo_base.items()) + "\n"
     fragment = fragment.replace("    proxy: PROXY", "    proxy: DIRECT")
+    fragment = block_mihomo_proxy_quic(fragment)
     mihomo += fragment
     uri = converted["URI"].strip()
     if not uri.startswith("vmess://"):
