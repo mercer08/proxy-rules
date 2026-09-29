@@ -379,12 +379,12 @@ rules:
             for client in ("surge", "shadowrocket", "mihomo"):
                 (root / client).mkdir()
             fragment = 'rule-providers:\n'
-            for name in ("private", "apple", "proxy"):
+            for name in ("private", "ai", "apple", "proxy"):
                 fragment += f'  {name}:\n    type: http\n    behavior: domain\n    url: "{raw}mihomo/{name}.yaml"\n    proxy: PROXY\n'
-            fragment += 'rules:\n  - "RULE-SET,private,DIRECT"\n  - "RULE-SET,apple,APPLE"\n  - "RULE-SET,proxy,PROXY"\n  - "MATCH,PROXY"\n'
+            fragment += 'rules:\n  - "RULE-SET,private,DIRECT"\n  - "RULE-SET,ai,AI"\n  - "RULE-SET,apple,APPLE"\n  - "RULE-SET,proxy,PROXY"\n  - "MATCH,PROXY"\n'
             (root / 'mihomo/rules.yaml').write_text(fragment)
             for client in ('surge', 'shadowrocket'):
-                (root / client / 'rules.conf').write_text('[Rule]\nRULE-SET,' + raw + client + '/apple.list,APPLE\nFINAL,PROXY\n')
+                (root / client / 'rules.conf').write_text('[Rule]\nRULE-SET,' + raw + client + '/ai.list,AI\nRULE-SET,' + raw + client + '/apple.list,APPLE\nFINAL,PROXY\n')
             private = root / 'private-rules/lan-com.list'
             d.atomic_write(private, 'DOMAIN,host.internal.test\nDOMAIN-SUFFIX,corp.internal.test\n')
             config = {'state_dir': str(root), 'private_lan_file': str(private),
@@ -398,12 +398,18 @@ rules:
                 for file in ('surge.conf', 'shadowrocket.conf'):
                     self.assertTrue(rendered[file].endswith('FINAL,' + policy + '\n'))
                     self.assertIn('APPLE = select', rendered[file])
+                    self.assertIn('AI = select', rendered[file])
+                    self.assertIn('/ai.list,AI', rendered[file])
                 for file in ('mihomo.yaml', 'stash.yaml'):
                     profile = yaml.safe_load(rendered[file])
                     self.assertEqual(profile['rules'][-1], 'MATCH,' + policy)
-                    self.assertEqual(profile['proxy-groups'][1], {'name':'APPLE','type':'select','proxies':['DIRECT','PROXY']})
+                    self.assertEqual(next(g for g in profile['proxy-groups'] if g['name']=='APPLE'), {'name':'APPLE','type':'select','proxies':['DIRECT','PROXY']})
+                    self.assertEqual(next(g for g in profile['proxy-groups'] if g['name']=='AI'), {'name':'AI','type':'select','proxies':['PROXY','DIRECT']})
+                    self.assertLess(profile['rules'].index('RULE-SET,ai,AI'), profile['rules'].index('RULE-SET,proxy,PROXY'))
                     self.assertLess(profile['rules'].index('RULE-SET,apple,APPLE'), profile['rules'].index('RULE-SET,proxy,PROXY'))
                 stash = yaml.safe_load(rendered['stash.yaml'])
+                mihomo = yaml.safe_load(rendered['mihomo.yaml'])
+                self.assertEqual(mihomo['dns']['nameserver-policy']['rule-set:ai'], ['https://1.1.1.1/dns-query#AI'])
                 self.assertNotIn('lan-com', stash['rule-providers'])
                 self.assertTrue(all(p['type'] == 'http' and 'payload' not in p for p in stash['rule-providers'].values()))
                 self.assertFalse(any('rule-set:' in p for p in stash['dns']['nameserver-policy']))
@@ -412,7 +418,7 @@ rules:
                 self.assertEqual('host.internal.test' in stash['dns']['nameserver-policy'], owner)
                 if owner:
                     self.assertEqual(stash['dns']['nameserver-policy']['+.corp.internal.test'], 'system')
-                    self.assertLess(stash['rules'].index('DOMAIN,host.internal.test,DIRECT'), stash['rules'].index('RULE-SET,apple,APPLE'))
+                    self.assertLess(stash['rules'].index('DOMAIN,host.internal.test,DIRECT'), stash['rules'].index('RULE-SET,ai,AI'))
 
 
 if __name__ == "__main__":
