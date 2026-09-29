@@ -403,7 +403,7 @@ def shadowrocket_proxy(node):
             f"udp={1 if node.get('udp') else 0}")
 
 
-def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=False, proxy_names=None, proxies=None):
+def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=False, proxy_names=None, proxies=None, final_policy=None):
     template = Path(config["templates_dir"]) / "shadowrocket.conf"
     if proxies is not None:
         proxy_names = [node["name"] for node in proxies]
@@ -421,19 +421,26 @@ def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=F
     text = re.sub(r"(?m)^update-url\s*=.*\n?", "", text)
     fragment = prepare_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", config, rules_dir, digest, business_rules)
     text += "AI = select,PROXY,DIRECT, policy-select-name=PROXY\nAPPLE = select,DIRECT,PROXY, policy-select-name=DIRECT\n"
-    return text + final_rules(fragment, "shadowrocket", business_rules)
+    choices = final_choices({"business_rules": business_rules, "final_policy": final_policy or ("PROXY" if business_rules else "DIRECT")})
+    text += "FINAL = select," + ",".join(choices) + ", policy-select-name=" + choices[0] + "\n"
+    return text + final_rules(fragment, "shadowrocket")
 
 
-def final_rules(fragment, client, owner):
-    policy = "PROXY" if owner else "DIRECT"
+def final_choices(account):
+    policy = account.get("final_policy", "PROXY" if account.get("business_rules") else "DIRECT")
+    if policy not in ("PROXY", "DIRECT"):
+        raise ValueError("Unsupported FINAL default policy")
+    return [policy, "DIRECT" if policy == "PROXY" else "PROXY"]
+
+
+def final_rules(fragment, client):
     if client in ("mihomo", "stash"):
-        return re.sub(r'(?m)^  - "MATCH,(?:PROXY|DIRECT)"$', '  - "MATCH,' + policy + '"', fragment)
-    return re.sub(r"(?m)^FINAL,(?:PROXY|DIRECT)$", "FINAL," + policy, fragment)
+        return re.sub(r'(?m)^  - "MATCH,(?:PROXY|DIRECT|FINAL)"$', '  - "MATCH,FINAL"', fragment)
+    return re.sub(r"(?m)^FINAL,(?:PROXY|DIRECT|FINAL)$", "FINAL,FINAL", fragment)
 
 
 def render_stash(config, account, proxies, rules_dir, digest):
     """Stash export avoids Mihomo-only inline providers and rule-set DNS keys."""
-    owner = account.get("final_policy", "PROXY" if account.get("business_rules") else "DIRECT") == "PROXY"
     fragment = strip_private_rule_references((rules_dir / "mihomo/rules.yaml").read_text(), "mihomo")
     fragment = select_rules(fragment, "mihomo", account.get("business_rules", False))
     patterns = ["localhost", "+.local", "+.lan", "+.home.arpa"]
@@ -447,13 +454,14 @@ def render_stash(config, account, proxies, rules_dir, digest):
             "proxies": proxies,
             "proxy-groups": [{"name": "PROXY", "type": "select", "proxies": [p["name"] for p in proxies]},
                              {"name": "AI", "type": "select", "proxies": ["PROXY", "DIRECT"]},
-                             {"name": "APPLE", "type": "select", "proxies": ["DIRECT", "PROXY"]}],
+                             {"name": "APPLE", "type": "select", "proxies": ["DIRECT", "PROXY"]},
+                             {"name": "FINAL", "type": "select", "proxies": final_choices(account)}],
             "dns": {"nameserver": ["https://dns.alidns.com/dns-query"],
                     "nameserver-policy": {p: "system" for p in dict.fromkeys(patterns)},
                     "fake-ip-filter": list(dict.fromkeys(patterns))}}
     # Stash HTTP providers do not need the Mihomo-only download proxy key.
     fragment = re.sub(r"(?m)^    proxy: PROXY\n", "", fragment)
-    return "\n".join(yaml_block(base)) + "\n" + final_rules(rewrite_rules(fragment, config, digest), "stash", owner)
+    return "\n".join(yaml_block(base)) + "\n" + final_rules(rewrite_rules(fragment, config, digest), "stash")
 
 
 def yaml_block(value, indent=0):
@@ -491,12 +499,15 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
     surge = re.sub(r"(?m)^#!MANAGED-CONFIG.*\n?", "", surge)
     business_rules = bool(account.get("business_rules", False))
     surge += "AI = select, PROXY, DIRECT\nAPPLE = select, DIRECT, PROXY\n"
+    choices = final_choices(account)
+    surge += "FINAL = select, " + ", ".join(choices) + "\n"
     surge += prepare_rules((rules_dir / "surge/rules.conf").read_text(), "surge", config, rules_dir, digest, business_rules)
     mihomo_base = json.loads((templates / "mihomo.json").read_text())
     mihomo_base["proxies"] = proxies
     mihomo_base["proxy-groups"] = [{"name": "PROXY", "type": "select", "proxies": names},
                                    {"name": "AI", "type": "select", "proxies": ["PROXY", "DIRECT"]},
-                                   {"name": "APPLE", "type": "select", "proxies": ["DIRECT", "PROXY"]}]
+                                   {"name": "APPLE", "type": "select", "proxies": ["DIRECT", "PROXY"]},
+                                   {"name": "FINAL", "type": "select", "proxies": choices}]
     fragment = prepare_rules((rules_dir / "mihomo/rules.yaml").read_text(), "mihomo", config, rules_dir, digest, business_rules)
     # DNS classifications follow the same ordered domain rules, including custom
     # overrides; do not let a broad domestic set override an explicit proxy set.
@@ -542,13 +553,12 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
     uris = uri.splitlines()
     if len(uris) != len(names) or any(not line.startswith("vmess://") for line in uris):
         raise ValueError("Unexpected URI node list")
-    owner = account.get("final_policy", "PROXY" if business_rules else "DIRECT") == "PROXY"
-    shadowrocket = render_shadowrocket(config, rules_dir, digest, "", business_rules, proxies=proxies)
-    return {"surge.conf": final_rules(surge, "surge", owner), "mihomo.yaml": final_rules(mihomo, "mihomo", owner),
+    shadowrocket = render_shadowrocket(config, rules_dir, digest, "", business_rules, proxies=proxies, final_policy=choices[0])
+    return {"surge.conf": final_rules(surge, "surge"), "mihomo.yaml": final_rules(mihomo, "mihomo"),
             "stash.yaml": render_stash(config, account, proxies, rules_dir, digest),
             "shadowrocket.txt": base64.b64encode(("\n".join(uris) + "\n").encode()).decode() + "\n",
             "node.txt": "\n".join(uris) + "\n",
-            "shadowrocket.conf": final_rules(shadowrocket, "shadowrocket", owner)}
+            "shadowrocket.conf": shadowrocket}
 
 
 def generate(config):

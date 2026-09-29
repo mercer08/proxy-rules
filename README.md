@@ -43,7 +43,7 @@ Surge 及 Shadowrocket 的下载方式应在完整配置中设置。不要把 Gi
 7. 上游国内／直连域名：`DIRECT`。
 8. Telegram IP：`PROXY`。
 9. 国内 IP：`DIRECT`。
-10. 未匹配流量：公开片段默认为 `PROXY`；私有导出为本人 PROXY、其他账号 DIRECT。
+10. 未匹配流量：公开片段默认为 `PROXY`；私有导出指向独立 `FINAL` 策略组，自用账号默认选 PROXY、其他账号默认选 DIRECT，均可切换。
 
 IP 规则保留 `no-resolve`：避免仅为匹配 IP 规则而额外解析域名。客户端已知目标 IP 时仍能匹配。
 DNS 解析行为需要在完整客户端模板中配置。本仓库的匹配检查不会查询公共 DNS。
