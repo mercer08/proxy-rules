@@ -90,3 +90,19 @@ test('private LAN editor saves centrally and friends never receive internal rule
   await expect(page.locator('#editor')).not.toContainText('internal.business.test');
   await expect(page.locator('#editor')).not.toContainText('second.internal.test');
 });
+
+
+test('Stash has a distinct YAML export and a private LAN rule without an inline provider', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Stash', exact: true }).click();
+  await expect(page.locator('#file-select')).toHaveValue('stash.yaml');
+  await expect(page.locator('#validation-status')).toHaveText('YAML 语法通过');
+  const accounts = await (await page.request.get('/api/accounts')).json();
+  const result = await (await page.request.get(`/api/accounts/${accounts.accounts[0].id}/files/stash.yaml`)).json();
+  expect(result.content).toContain('APPLE');
+  expect(result.content).toContain('internal.business.test,DIRECT');
+  expect(result.content).not.toContain('type: inline');
+  const event = page.waitForEvent('download');
+  await page.locator('#download-file').click();
+  expect((await event).suggestedFilename()).toBe('stash.yaml');
+});

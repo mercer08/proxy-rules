@@ -212,7 +212,7 @@ class DistributionTests(unittest.TestCase):
                 d.main()
             cli_stream.flush()
             with tarfile.open(fileobj=io.BytesIO(cli_output.getvalue()), mode="r:gz") as exported:
-                self.assertEqual(len(exported.getmembers()), 6)
+                self.assertEqual(len(exported.getmembers()), 7)
                 self.assertTrue(all(m.name.startswith("friend/") for m in exported.getmembers()))
 
     def test_cdn_verification_rejects_tampering_and_never_fetches_business_rules(self):
@@ -288,7 +288,7 @@ rules:
             dns = mihomo["dns"]
             self.assertEqual(list(dns["nameserver-policy"]), ["rule-set:proxy", "rule-set:direct"])
             self.assertTrue(dns["nameserver-policy"]["rule-set:proxy"][0].endswith("#PROXY"))
-            self.assertEqual(mihomo["rules"], ["RULE-SET,proxy,PROXY", "RULE-SET,direct,DIRECT", "MATCH,PROXY"])
+            self.assertEqual(mihomo["rules"], ["RULE-SET,proxy,PROXY", "RULE-SET,direct,DIRECT", "MATCH,DIRECT"])
             self.assertEqual(mihomo["proxies"], [node])
             self.assertIn("block-quic = always-allow", rendered["surge.conf"])
             self.assertNotIn("block-quic=on", rendered["surge.conf"])
@@ -371,6 +371,48 @@ rules:
                 dns = yaml.safe_load(rendered["mihomo.yaml"])["dns"]
                 self.assertEqual("rule-set:lan-com" in dns["nameserver-policy"], enabled)
                 self.assertEqual("rule-set:lan-com" in dns["fake-ip-filter"], enabled)
+
+    def test_stash_uses_plain_private_rules_and_final_policy_is_account_scoped(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            raw = "https://raw.githubusercontent.com/mercer08/proxy-rules/release/"
+            for client in ("surge", "shadowrocket", "mihomo"):
+                (root / client).mkdir()
+            fragment = 'rule-providers:\n'
+            for name in ("private", "apple", "proxy"):
+                fragment += f'  {name}:\n    type: http\n    behavior: domain\n    url: "{raw}mihomo/{name}.yaml"\n    proxy: PROXY\n'
+            fragment += 'rules:\n  - "RULE-SET,private,DIRECT"\n  - "RULE-SET,apple,APPLE"\n  - "RULE-SET,proxy,PROXY"\n  - "MATCH,PROXY"\n'
+            (root / 'mihomo/rules.yaml').write_text(fragment)
+            for client in ('surge', 'shadowrocket'):
+                (root / client / 'rules.conf').write_text('[Rule]\nRULE-SET,' + raw + client + '/apple.list,APPLE\nFINAL,PROXY\n')
+            private = root / 'private-rules/lan-com.list'
+            d.atomic_write(private, 'DOMAIN,host.internal.test\nDOMAIN-SUFFIX,corp.internal.test\n')
+            config = {'state_dir': str(root), 'private_lan_file': str(private),
+                      'templates_dir': str(ROOT / 'deployment/templates'), 'server': '203.0.113.1',
+                      'public_url': 'https://203.0.113.1', 'repository': 'mercer08/proxy-rules',
+                      'rules_delivery': 'jsdelivr', '_rules_tag': 'rules-now-' + 'b' * 10}
+            converted = {'proxies': [vmess_node()], 'Surge': 'DMIT-Native=vmess,203.0.113.1,443,tls=true', 'URI': 'vmess://synthetic'}
+            for owner in (False, True):
+                rendered = d.render_profiles(config, {'business_rules': owner}, converted, '', root, 'b' * 64)
+                policy = 'PROXY' if owner else 'DIRECT'
+                for file in ('surge.conf', 'shadowrocket.conf'):
+                    self.assertTrue(rendered[file].endswith('FINAL,' + policy + '\n'))
+                    self.assertIn('APPLE = select', rendered[file])
+                for file in ('mihomo.yaml', 'stash.yaml'):
+                    profile = yaml.safe_load(rendered[file])
+                    self.assertEqual(profile['rules'][-1], 'MATCH,' + policy)
+                    self.assertEqual(profile['proxy-groups'][1], {'name':'APPLE','type':'select','proxies':['DIRECT','PROXY']})
+                    self.assertLess(profile['rules'].index('RULE-SET,apple,APPLE'), profile['rules'].index('RULE-SET,proxy,PROXY'))
+                stash = yaml.safe_load(rendered['stash.yaml'])
+                self.assertNotIn('lan-com', stash['rule-providers'])
+                self.assertTrue(all(p['type'] == 'http' and 'payload' not in p for p in stash['rule-providers'].values()))
+                self.assertFalse(any('rule-set:' in p for p in stash['dns']['nameserver-policy']))
+                self.assertFalse(any('rule-set:' in p for p in stash['dns']['fake-ip-filter']))
+                self.assertEqual('DOMAIN,host.internal.test,DIRECT' in stash['rules'], owner)
+                self.assertEqual('host.internal.test' in stash['dns']['nameserver-policy'], owner)
+                if owner:
+                    self.assertEqual(stash['dns']['nameserver-policy']['+.corp.internal.test'], 'system')
+                    self.assertLess(stash['rules'].index('DOMAIN,host.internal.test,DIRECT'), stash['rules'].index('RULE-SET,apple,APPLE'))
 
 
 if __name__ == "__main__":

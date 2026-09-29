@@ -34,11 +34,12 @@ Surge 及 Shadowrocket 的下载方式应在完整配置中设置。不要把 Gi
 2. 自定义强制直连、强制代理、自定义拦截。
    然后匹配公开专项规则 `wan-com`（PROXY）、`futu-broker`（PROXY）。内网域名仅由 SSH 私有配置台注入。
 3. 社区广告拦截：仅在 `rules-ads` 片段启用。
-4. 上游明确代理域名：`PROXY`。
-5. 上游国内／直连域名：`DIRECT`。
-6. Telegram IP：`PROXY`。
-7. 国内 IP：`DIRECT`。
-8. 未匹配流量：`PROXY`。
+4. Apple 与 iCloud：独立 `apple` 规则集，走 `APPLE` 策略组（默认 DIRECT，可选 PROXY）。
+5. 上游明确代理域名：`PROXY`。
+6. 上游国内／直连域名：`DIRECT`。
+7. Telegram IP：`PROXY`。
+8. 国内 IP：`DIRECT`。
+9. 未匹配流量：公开片段默认为 `PROXY`；私有导出为本人 PROXY、其他账号 DIRECT。
 
 IP 规则保留 `no-resolve`：避免仅为匹配 IP 规则而额外解析域名。客户端已知目标 IP 时仍能匹配。
 DNS 解析行为需要在完整客户端模板中配置。本仓库的匹配检查不会查询公共 DNS。
@@ -153,3 +154,5 @@ DMIT 拉取完整版本包并校验 → 解压到新的版本目录 → 校验�
 
 请参阅 [NOTICE.md](NOTICE.md) 和 [LICENSE](LICENSE)。转换保留所选上游发布文件的语义，
 不能恢复已经被上游构建过滤掉的正则或其他规则类型。
+
+私有配置台分别提供 Surge、Mihomo、Stash、Shadowrocket 完整配置。Stash 请使用 `stash.yaml`，避免混入 Mihomo 专有 provider/DNS 语法。本人三个设备兜底 PROXY，其他账号兜底 DIRECT；显式代理规则仍保持 PROXY。

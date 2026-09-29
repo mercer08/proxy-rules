@@ -63,9 +63,10 @@ class RuleTests(unittest.TestCase):
         inputs = {"private": ["+.local"], "direct": ["+.cn.example", "exact.example"],
                   "proxy": ["+.foreign.example"], "reject": ["+.ads.example"],
                   "lan": ["10.0.0.0/8", "fc00::/7"], "cn": ["1.0.1.0/24"],
-                  "telegram": ["149.154.160.0/20"]}
+                  "telegram": ["149.154.160.0/20"], "apple": ["+.apple.example"]}
         for name, payload in inputs.items():
-            (root / "inputs" / config["sets"][name]["file"]).write_text(b.yaml_payload(payload))
+            for filename in [config["sets"][name]["file"], *config["sets"][name].get("additional_files", [])]:
+                (root / "inputs" / filename).write_text(b.yaml_payload(payload))
         cases = [{"domain": "router.local", "expected": "DIRECT"},
                  {"ip": "10.0.0.1", "expected": "DIRECT"},
                  {"domain": "foreign.example", "expected": "PROXY"},
@@ -196,6 +197,28 @@ class RuleTests(unittest.TestCase):
     def test_private_lan_publication_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'Private LAN'):
             b.custom_order({'custom_sets': [{'name': 'lan-com', 'policy': 'DIRECT'}]})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            (root / 'custom/lan-com.list').write_text('DOMAIN,internal.example\n')
+            with self.assertRaisesRegex(ValueError, 'Private LAN file'):
+                b.build(root, root / 'out', root / 'inputs', 'a' * 40)
+
+    def test_apple_and_icloud_merge_and_precede_aggregate_sets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            (root / 'inputs/apple.txt').write_text(b.yaml_payload(['+.apple.example']))
+            (root / 'inputs/icloud.txt').write_text(b.yaml_payload(['+.icloud.example']))
+            (root / 'inputs/direct.txt').write_text(b.yaml_payload(['+.apple.example', '+.cn.example']))
+            manifest = b.build(root, root / 'out', root / 'inputs', 'a' * 40)
+            self.assertEqual(manifest['counts']['apple'], 2)
+            self.assertNotIn('apple.example', (root / 'out/mihomo/direct.yaml').read_text())
+            for client, file in (('mihomo','rules.yaml'),('surge','rules.conf'),('shadowrocket','rules.conf')):
+                text = (root / 'out' / client / file).read_text()
+                self.assertIn(',APPLE', text)
+                self.assertLess(text.index('/apple.'), text.index('/proxy.'))
+                self.assertIn('icloud.example', (root / 'out' / client / ('apple.yaml' if client == 'mihomo' else 'apple.list')).read_text())
 
 if __name__ == "__main__":
     unittest.main()
