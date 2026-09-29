@@ -1,6 +1,6 @@
 {
   "advertising_enabled_by_default": false,
-  "content_digest": "49077cf507eae398ca0b8ccd5dc477c0619103f112078d1f980a9b9262e68979",
+  "content_digest": "678ac6c1423bfbf5c151c5821d452667f82224ad412f827925feb4542ff0d51b",
   "counts": {
     "apple": 218,
     "cn": 9612,
@@ -16,7 +16,7 @@
     "futu-broker": 119,
     "proxy": 0,
     "reject": 0,
-    "wan-com": 19
+    "wan-com": 21
   },
   "input_sha256": {
     "apple.txt": "a47d516880dcf65f51d3b40e6a71c33253e0774bdc4a7ec0a0d0a09a4dd522a2",
@@ -62,7 +62,7 @@
     "mihomo/rules-ads.yaml": "e3bc8806428e12ac3f63a8e8eb8a04487eb9a8b34e60d4553bbde963d71f0eb8",
     "mihomo/rules.yaml": "b7d5283b7deca078025430eb0e637def87200dbf3b11d66ce664fa119474e22b",
     "mihomo/telegram.yaml": "8468e572889c5d55e7dbf398b2666f0237d5a327d6e4b51352a76f6f26b25333",
-    "mihomo/wan-com.yaml": "b050c3759259ac206183fb27d3201eb9648b1c789c4c635b54b4cfe625a0b38d",
+    "mihomo/wan-com.yaml": "a7b75647f714cb604fbbc5e113bfabb83bafc969d43cce070d4434e1b752f8e6",
     "shadowrocket/apple.list": "09de44160337ae67d1bbb66188ddfca56063be91ed5f5873c39da0c8ab214942",
     "shadowrocket/cn.list": "7f0feaf6ecf53e9d72c2e316ef0c8e72ce5f71070e8001cc08bf36aebc6daea7",
     "shadowrocket/custom-direct.list": "c77a9ad9358f340768ad6706941549834e0465f8d50fbf7b27e1e44fb6b65055",
@@ -77,7 +77,7 @@
     "shadowrocket/rules-ads.conf": "2c968ef43cdbf4d469ffca5d8212f49838c93922d16772d8de84e25b5bc92a24",
     "shadowrocket/rules.conf": "7a9db432080150e846047dc11fd679ab31742ea426bfddbf0cdb54ca4ddc5a6a",
     "shadowrocket/telegram.list": "d331ac1fac619df933a563115a00998fbe15ef83c0b526a2794c49482fb02417",
-    "shadowrocket/wan-com.list": "734b5784fd3d68930a06e649111ef9245cb5488f0b6f027f06a986f9d24af442",
+    "shadowrocket/wan-com.list": "2702b961a4f4abcb8a1cad9d0573a20f409be86e20e7e31be7c916a37d5a6e9b",
     "surge/apple.domainset": "72ec4199fbc77530dac0b6ca98de112a602f3d5b933abcbcad34b202762d621a",
     "surge/apple.list": "09de44160337ae67d1bbb66188ddfca56063be91ed5f5873c39da0c8ab214942",
     "surge/cn.list": "7f0feaf6ecf53e9d72c2e316ef0c8e72ce5f71070e8001cc08bf36aebc6daea7",
@@ -97,7 +97,7 @@
     "surge/rules-ads.conf": "f04e369789e9bfb3c66b8b262a4e07386a6bfed4075ff4fa199aa07081c9be41",
     "surge/rules.conf": "2aa09d40b7bf40d371309fa4a57fc6cfdae5c281ef313e74075a54e492bfe50d",
     "surge/telegram.list": "d331ac1fac619df933a563115a00998fbe15ef83c0b526a2794c49482fb02417",
-    "surge/wan-com.list": "734b5784fd3d68930a06e649111ef9245cb5488f0b6f027f06a986f9d24af442"
+    "surge/wan-com.list": "2702b961a4f4abcb8a1cad9d0573a20f409be86e20e7e31be7c916a37d5a6e9b"
   },
   "upstream": {
     "branch": "release",
