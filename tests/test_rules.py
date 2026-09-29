@@ -129,6 +129,8 @@ class RuleTests(unittest.TestCase):
             (root / "inputs/reject.txt").write_text(b.yaml_payload(["+.launchdarkly.com", "+.clarity.ms"]))
             (root / "inputs/cncidr.txt").write_text(b.yaml_payload(["1.14.242.0/23"]))
             cases = [{"domain": "api.mexc.com", "expected": "PROXY"},
+                     {"domain": "www.coldbooktly.ru", "expected": "PROXY"},
+                     {"domain": "www.coldbookfly.ru", "expected": "PROXY"},
                      {"domain": "clarity.ms", "expected": "PROXY"},
                      {"domain": "futu.cn", "expected": "PROXY"},
                      {"domain": "new-futu-endpoint.example", "expected": "PROXY"},
@@ -138,7 +140,7 @@ class RuleTests(unittest.TestCase):
             (root / "tests/cases.json").write_text(json.dumps(cases))
             manifest = b.build(root, root / "out", root / "inputs", "a" * 40)
             self.assertNotIn("lan-com", manifest["custom_counts"])
-            self.assertEqual(manifest["custom_counts"]["wan-com"], 19)
+            self.assertEqual(manifest["custom_counts"]["wan-com"], 21)
             for client, filename in (("surge", "rules-ads.conf"), ("shadowrocket", "rules-ads.conf"), ("mihomo", "rules-ads.yaml")):
                 text = (root / "out" / client / filename).read_text()
                 self.assertNotIn("lan-com", text)
