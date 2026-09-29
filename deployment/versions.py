@@ -35,8 +35,11 @@ def backup(config, record, identifier, atomic_write, reason='before-change'):
     parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     os.chmod(parent.parent, 0o700)
     for item in parent.iterdir():
-        if item.is_dir() and not item.is_symlink() and (item / 'manifest.json').is_file():
-            previous = json.loads((item / 'manifest.json').read_text())
+        if re.fullmatch(r'[0-9]+-[a-f0-9]{12}', item.name) and item.is_dir() and not item.is_symlink():
+            try:
+                previous, _ = read_version(config, identifier, item.name)
+            except (ValueError, KeyError, TypeError, FileNotFoundError):
+                continue
             if previous['digest'] == digest:
                 return previous
     stamp = time.time_ns()
@@ -71,6 +74,8 @@ def read_version(config, identifier, version):
     path = root(config, identifier) / version
     if path.is_symlink() or not path.is_dir():
         raise ValueError('Version unavailable')
+    if (path / 'manifest.json').is_symlink():
+        raise ValueError('Unsafe version manifest')
     metadata = json.loads((path / 'manifest.json').read_text())
     if set(metadata['sha256']) != set(FILES) or metadata['version'] != version:
         raise ValueError('Invalid version manifest')
@@ -106,6 +111,9 @@ def restore(config, record, identifier, version, atomic_write, regenerate):
     target = Path(config['state_dir']) / 'profile-overrides' / identifier
     if target.is_symlink() or target.parent.is_symlink():
         raise ValueError('Unsafe override directory')
+    target.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(target, 0o700)
+    os.chmod(target.parent, 0o700)
     existing = {name: (target / name).read_bytes() if (target / name).exists() else None for name in CONFIGS}
     try:
         for name in CONFIGS:

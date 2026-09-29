@@ -157,3 +157,6 @@ class PersonalTests(unittest.TestCase):
             (versions.root(config, identifier) / m['version'] / 'surge.conf').write_text('tampered')
             with self.assertRaises(ValueError):
                 versions.package(config, identifier, m['version'])
+            replacement = versions.backup(config, record, identifier, d.atomic_write)
+            self.assertNotEqual(replacement['version'], m['version'])
+            self.assertEqual(versions.read_version(config, identifier, replacement['version'])[1]['surge.conf'], b'surge.conf')
