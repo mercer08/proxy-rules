@@ -1,0 +1,31 @@
+name: Sync service categories
+on:
+  schedule:
+    - cron: '27 0 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['scripts/build_services.py', 'scripts/publish_services.py', '.github/workflows/services.yml']
+permissions:
+  contents: write
+concurrency:
+  group: service-categories
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Build domain-only service snapshot
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/build_services.py --output "$RUNNER_TEMP/services"
+      - name: Publish and verify separate CDN version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish_services.py --source "$RUNNER_TEMP/services"

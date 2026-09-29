@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "MICROSOFT": "DIRECT",
+    "PAYPAL": "DIRECT",
+    "FINAL": "PROXY",
+    "BROKER": "PROXY"
+  },
+  "company_device": "WORK_MAC",
+  "home_device": "HOME_MAC",
+  "home_router": "192.168.50.1",
+  "home_domains": ["home.arpa"],
+  "home_networks": ["192.168.50.0/24"],
+  "company_rules": ["DOMAIN-SUFFIX,internal.example"],
+  "force_proxy": ["DOMAIN,media.example"],
+  "force_direct": ["DOMAIN,stun.example"]
+}

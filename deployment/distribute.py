@@ -21,6 +21,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import personal
+import versions
 
 
 MAX_BUNDLE = 32 * 1024 * 1024
@@ -149,6 +152,7 @@ def mirror(config):
     state = Path(config["state_dir"])
     latest = state / "rules.json"
     if latest.exists() and json.loads(latest.read_text()).get("tag") == tag:
+        personal.mirror_services(config, fetch, atomic_write)
         return
     prefix = "https://github.com/" + repository + "/releases/download/" + tag + "/"
     urls = {asset["name"]: asset["browser_download_url"] for asset in metadata["assets"]}
@@ -175,11 +179,13 @@ def mirror(config):
             staging.mkdir()
     atomic_write(latest, json.dumps({"tag": tag, "digest": version}) + "\n")
     print("Rules mirrored: " + tag)
+    personal.mirror_services(config, fetch, atomic_write)
 
 
 def load_accounts(config, now=None):
     now = time.time() if now is None else now
     business_accounts = config.get("business_rule_accounts", [])
+    personal_inputs = personal.inputs(config)
     if not isinstance(business_accounts, list) or any(not isinstance(email, str) or not email for email in business_accounts):
         raise ValueError("Business rule accounts must be a list of account identifiers")
     database = Path(config["database"]).resolve()
@@ -229,6 +235,10 @@ def load_accounts(config, now=None):
                     "label": label, "nodes": [], "expiry": expiry,
                     "business_rules": email in business_accounts,
                     "final_policy": "PROXY" if email in config.get("proxy_final_accounts", business_accounts) else "DIRECT"})
+                if email in personal_inputs:
+                    account['personal'] = personal_inputs[email]
+                    account['personal_path'] = str(personal.settings_paths(config)[email])
+                    account['final_policy'] = personal.choices(personal_inputs[email], 'FINAL')[0]
                 node = {"name": mapping["name"], "type": "vmess", "server": config["server"],
                         "port": config["port"], "uuid": client["id"], "alterId": 0,
                         "cipher": "aes-128-gcm", "tls": True, "skip-cert-verify": False,
@@ -554,11 +564,13 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
     if len(uris) != len(names) or any(not line.startswith("vmess://") for line in uris):
         raise ValueError("Unexpected URI node list")
     shadowrocket = render_shadowrocket(config, rules_dir, digest, "", business_rules, proxies=proxies, final_policy=choices[0])
-    return {"surge.conf": final_rules(surge, "surge"), "mihomo.yaml": final_rules(mihomo, "mihomo"),
+    profiles = {"surge.conf": final_rules(surge, "surge"), "mihomo.yaml": final_rules(mihomo, "mihomo"),
             "stash.yaml": render_stash(config, account, proxies, rules_dir, digest),
             "shadowrocket.txt": base64.b64encode(("\n".join(uris) + "\n").encode()).decode() + "\n",
             "node.txt": "\n".join(uris) + "\n",
             "shadowrocket.conf": shadowrocket}
+    private = parse_private_lan(private_lan_path(config).read_text()) if account.get('personal') and business_rules else []
+    return personal.render(profiles, config, account, private, yaml_block)
 
 
 def generate(config):
@@ -568,12 +580,15 @@ def generate(config):
     config = dict(config, _rules_tag=rule_state["tag"])
     rules_dir = state / "rules/releases" / digest
     accounts = load_accounts(config)
+    personal_service_version = personal.service_state(config)
     overrides = profile_overrides(state)
     template_files = sorted(Path(config["templates_dir"]).glob("*"))
     template_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in template_files if p.is_file()}
     fingerprint = hashlib.sha256(json.dumps({"config": config, "accounts": accounts, "rules": digest,
                                             "templates": template_hashes, "overrides": overrides,
                                             "private_lan": private_lan_path(config).read_text() if any(a["business_rules"] for a in accounts.values()) else "",
+                                            "services": personal_service_version,
+                                            "personal_renderer": hashlib.sha256(Path(personal.__file__).read_bytes()).hexdigest(),
                                             "generator": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}, sort_keys=True).encode()).hexdigest()
     current = state / "profiles.json"
     if current.exists() and json.loads(current.read_text()).get("fingerprint") == fingerprint:
@@ -610,6 +625,9 @@ def generate(config):
                             "nodes": [n["name"] for n in account["nodes"]], "edited": edited,
                             "final_policy": account.get("final_policy", "PROXY" if account["business_rules"] else "DIRECT"),
                             "files": {name: str(profiles_root / "current" / folder / name) for name in profiles}})
+            if account.get('personal'):
+                records[-1]['personal_path'] = account['personal_path']
+                records[-1]['personal_defaults'] = {g: personal.choices(account['personal'], g)[0] for g in personal.PUBLIC_GROUPS}
         shared = staging / "shared"
         shared.mkdir()
         shadowrocket = render_shadowrocket(config, rules_dir, digest,
@@ -620,6 +638,14 @@ def generate(config):
             os.chmod(path, 0o700 if path.is_dir() else 0o600)
         destination = generations / (str(time.time_ns()) + "-" + fingerprint[:12])
         os.rename(staging, destination)
+        # Back up only opted-in accounts, after successful rendering but before switching output.
+        old_records = json.loads(current.read_text()).get('accounts', []) if current.exists() else []
+        for record in records:
+            if record.get('personal_path'):
+                identifier = Path(record['files']['surge.conf']).parent.name
+                old = next((r for r in old_records if r['files']['surge.conf'] == record['files']['surge.conf']), None)
+                if old and any(Path(old['files'][n]).read_bytes() != (destination / identifier / n).read_bytes() for n in PROFILE_FILES):
+                    versions.backup(config, old, identifier, atomic_write)
         switch_link(profiles_root / "current", destination)
         atomic_write(current, json.dumps({"fingerprint": fingerprint, "rules": digest, "accounts": records}, ensure_ascii=False, indent=2) + "\n")
         lines = ["# DMIT SSH 配置文件", "", "仅通过 SSH 下载配置；公网下载入口已关闭。", "",

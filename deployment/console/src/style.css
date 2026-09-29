@@ -6,3 +6,7 @@
 .client-tab[hidden] { display: none; }
 
 .client-tabs { min-width: 0; overflow-x: auto; } .client-tab { flex-shrink: 0; }
+
+.version-bar { display:flex; align-items:center; gap:12px; margin: 0 0 16px; padding:12px 16px; border:1px solid var(--border); border-radius:12px; font-size:12px; flex-wrap:wrap; }
+.version-bar[hidden] { display:none; }
+.version-bar select { flex:1; min-width:220px; max-width:420px; padding:8px; border-radius:8px; background:var(--surface); color:inherit; border:1px solid var(--border); }
