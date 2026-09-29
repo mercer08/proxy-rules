@@ -18,6 +18,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  rule_changes:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.changes.outputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" != push ] || ! git rev-parse HEAD^ >/dev/null 2>&1; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          elif git diff --quiet HEAD^ HEAD -- sources.json custom exclusions scripts/build.py scripts/publish.py scripts/check_cdn.py tests/cases.json; then
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          fi
   console:
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -71,7 +92,8 @@ jobs:
           sha256sum --check checksums.sha256
 
   publish:
-    if: github.event_name != 'pull_request'
+    needs: rule_changes
+    if: github.event_name != 'pull_request' && needs.rule_changes.outputs.publish == 'true'
     permissions:
       contents: write
     runs-on: ubuntu-latest

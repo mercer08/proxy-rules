@@ -27,6 +27,11 @@ for (const element of document.querySelectorAll('[data-icon]')) element.innerHTM
 for (const element of document.querySelectorAll('.app-mark')) element.setAttribute('aria-hidden', 'true');
 
 monaco.languages.register({ id: 'proxy-conf' });
+monaco.languages.register({ id: 'private-json' });
+monaco.languages.setMonarchTokensProvider('private-json', {
+  tokenizer: { root: [[/"(?:[^"\\]|\\.)*"(?=\s*:)/, 'attribute.name'], [/"(?:[^"\\]|\\.)*"/, 'string'],
+    [/\b(?:true|false|null)\b/, 'keyword'], [/-?\d+(?:\.\d+)?/, 'number'], [/[{}\[\]:,]/, 'delimiter']] },
+});
 monaco.languages.setMonarchTokensProvider('proxy-conf', {
   tokenizer: { root: [
     [/^\s*[#;].*$/, 'comment'], [/^\s*\[[^\]]+\]/, 'section'],
@@ -46,6 +51,7 @@ monaco.editor.defineTheme('private-light', { base: 'vs', inherit: true, rules: [
 const $ = (id) => document.getElementById(id);
 const state = { accounts: [], account: null, client: 'surge', file: 'surge.conf', baseline: '', etag: '', edited: false, loading: false, dirty: false, version: 0 };
 const clients = {
+  personal: { files: ['personal.json'], title: '个人策略 · 自动合并', help: '设置各组默认选择、个人例外和 Surge Ponte 路径，仅作用于本账号的四种 App。保存前自动备份，公共规则更新会继承这些设置。非 Surge 的 HOME、COMPANY_LAN 仅支持本地访问，远程访问需要另行配置通道。' },
   stash: { files: ['stash.yaml'], title: '导入 Stash', help: '手机 Stash 请导入 stash.yaml。内网规则直接内嵌，公开规则从 CDN 下载；APPLE 默认 DIRECT，可在策略组切换。' },
   lan: { files: ['lan-com.list'], title: '私有内网规则', help: '只填写 DOMAIN,域名 或 DOMAIN-SUFFIX,域名，每行一条，固定直连。保存后同步到你的三个设备配置；不进入 GitHub 或 CDN。WAN、券商及通用规则由 jsDelivr 提供。' },
   surge: { files: ['surge.conf'], title: '导入 Surge', help: '下载 surge.conf，在 Surge 中导入本地配置。公共规则仍由 jsDelivr 提供。' },
@@ -71,7 +77,7 @@ async function api(path, options = {}) {
   if (!response.ok) throw new Error(body.error || '请求失败');
   return body;
 }
-function fileURL() { if (state.client === 'lan') return '/api/private-rules/lan-com'; return `/api/accounts/${state.account.id}/files/${state.file}`; }
+function fileURL() { if (state.client === 'lan') return '/api/private-rules/lan-com'; if (state.client === 'personal') return `/api/accounts/${state.account.id}/personal`; return `/api/accounts/${state.account.id}/files/${state.file}`; }
 function confirmDiscard() { return !state.dirty || window.confirm('还有未保存的编辑，是否放弃这些修改？'); }
 function setLoading(value) {
   state.loading = value; editor.updateOptions({ readOnly: value || !state.account });
@@ -85,13 +91,20 @@ function updateStatus() {
   $('save-status').className = state.dirty ? 'unsaved' : 'saved';
   $('save-status').innerHTML = `<span class="connection-dot"></span>${state.loading ? '正在处理…' : state.dirty ? '有未保存的编辑' : state.client === 'lan' ? '私有规则 · 已同步' : state.edited ? '已保存个人编辑' : '自动生成 · 未修改'}`;
   $('save').disabled = state.loading || !state.account || !state.dirty;
-  $('restore').disabled = state.loading || !state.account || !state.edited || state.client === 'lan';
+  $('restore').disabled = state.loading || !state.account || !state.edited || ['lan', 'personal'].includes(state.client);
   for (const id of ['copy', 'download-file', 'download-account', 'refresh']) $(id).disabled = state.loading || !state.account;
   $('file-origin').textContent = state.client === 'lan' ? 'SSH 私有' : state.edited ? '个人编辑' : '自动生成';
   $('file-origin').classList.toggle('custom', state.edited);
 }
+function accountSubtitle(account) {
+  return account.personal ? `个人策略 · 自动版本备份 · FINAL ${account.finalPolicy} · MICROSOFT ${account.defaults.MICROSOFT} · PAYPAL ${account.defaults.PAYPAL}` : `选择客户端，编辑或下载。FINAL 默认 ${account.finalPolicy || (account.businessRules ? 'PROXY' : 'DIRECT')} · AI 默认 PROXY · APPLE 默认 DIRECT`;
+}
 function validate() {
   const model = editor.getModel();
+  if (state.file.endsWith('.json')) {
+    try { JSON.parse(editor.getValue()); $('validation-status').textContent = 'JSON 语法通过'; return true; }
+    catch { $('validation-status').textContent = 'JSON 语法错误'; return false; }
+  }
   if (!state.file.endsWith('.yaml')) {
     monaco.editor.setModelMarkers(model, 'yaml', []);
     $('validation-status').textContent = '语法高亮 · 客户端导入验证';
@@ -124,22 +137,23 @@ function renderAccounts() {
 }
 async function selectAccount(account) {
   if (state.loading || !confirmDiscard()) return;
-  state.account = account; $('lan-tab').hidden = !account.businessRules;
-  if (state.client === 'lan' && !account.businessRules) { state.client = 'surge'; state.file = 'surge.conf'; }
+  state.account = account; $('lan-tab').hidden = !account.businessRules || account.personal;
+  $('personal-tab').hidden = !account.personal; $('version-bar').hidden = !account.personal;
+  if ((state.client === 'lan' && (!account.businessRules || account.personal)) || (state.client === 'personal' && !account.personal)) { state.client = 'surge'; state.file = 'surge.conf'; }
   updateClient(); $('breadcrumb-account').textContent = account.label; $('account-title').textContent = account.label;
   $('node-names').textContent = account.nodes.join(' · ');
-  $('account-subtitle').textContent = `选择客户端，编辑或下载。FINAL 默认 ${account.finalPolicy || (account.businessRules ? 'PROXY' : 'DIRECT')} · AI 默认 PROXY · APPLE 默认 DIRECT`;
+  $('account-subtitle').textContent = accountSubtitle(account);
   $('rules-scope').lastChild.textContent = account.businessRules ? '公共规则 + 个人专项规则' : '公共分流规则';
-  renderAccounts(); await loadFile();
+  renderAccounts(); await loadFile(); if (account.personal && state.account?.id === account.id) await loadVersions();
 }
 async function loadFile() {
   const version = ++state.version; setLoading(true);
   try {
     const result = await api(fileURL()); if (version !== state.version) return;
     state.baseline = result.content; state.etag = result.etag; state.edited = result.edited;
-    monaco.editor.setModelLanguage(editor.getModel(), state.file.endsWith('.yaml') ? 'yaml' : state.file === 'shadowrocket.txt' ? 'plaintext' : 'proxy-conf');
+    monaco.editor.setModelLanguage(editor.getModel(), state.file.endsWith('.json') ? 'private-json' : state.file.endsWith('.yaml') ? 'yaml' : state.file === 'shadowrocket.txt' ? 'plaintext' : 'proxy-conf');
     editor.setValue(result.content); editor.setPosition({ lineNumber: 1, column: 1 }); editor.revealLine(1);
-    $('language-label').textContent = state.client === 'lan' ? 'DOMAIN RULES' : state.file.endsWith('.yaml') ? 'YAML' : state.file.endsWith('.conf') ? 'Proxy INI' : 'TEXT';
+    $('language-label').textContent = state.client === 'lan' ? 'DOMAIN RULES' : state.file.endsWith('.json') ? 'JSON' : state.file.endsWith('.yaml') ? 'YAML' : state.file.endsWith('.conf') ? 'Proxy INI' : 'TEXT';
     validate();
   } catch (error) { state.account = null; editor.setValue(''); toast(error.message, true); }
   finally { setLoading(false); }
@@ -151,12 +165,17 @@ function updateClient() {
 }
 async function save() {
   if (!state.account || !state.dirty || state.loading) return false;
-  if (!validate()) { toast('请先修复 YAML 语法问题', true); return false; }
+  if (!validate()) { toast('请先修复配置语法问题', true); return false; }
   setLoading(true);
   try {
     const result = await api(fileURL(), { method: 'PUT', body: JSON.stringify({ content: editor.getValue(), etag: state.etag }) });
-    state.baseline = result.content; state.etag = result.etag; state.edited = true;
-    toast(state.client === 'lan' ? '内网规则已保存，已同步到你的设备配置' : '编辑已保存，定时生成会保留此文件的个人版本'); return true;
+    state.baseline = result.content; state.etag = result.etag; state.edited = state.client !== 'personal';
+    if (state.client === 'personal') {
+      state.accounts = (await api('/api/accounts')).accounts; state.account = state.accounts.find(a => a.id === state.account.id);
+      $('account-subtitle').textContent = accountSubtitle(state.account);
+    }
+    if (state.account.personal) await loadVersions();
+    toast(state.client === 'personal' ? '个人策略已保存，四种 App 已重新生成，旧版本已备份' : state.client === 'lan' ? '内网规则已保存，已同步到你的设备配置' : '编辑已保存，定时生成会保留此文件的个人版本'); return true;
   } catch (error) { toast(error.message, true); return false; }
   finally { setLoading(false); }
 }
@@ -164,6 +183,35 @@ function download(content, name) {
   const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+async function loadVersions() {
+  const identifier = state.account.id;
+  const result = await api(`/api/accounts/${identifier}/versions`);
+  if (identifier !== state.account?.id) return;
+  state.versionEtag = result.etag;
+  $('version-select').replaceChildren(...result.versions.map(item => {
+    const option = document.createElement('option'); option.value = item.version;
+    option.textContent = `${new Date(item.created_ns / 1e6).toLocaleString()} · ${item.digest.slice(0, 8)}`; return option;
+  }));
+  $('download-version').disabled = $('rollback-version').disabled = !result.versions.length;
+}
+$('backup-version').onclick = async () => {
+  if (state.loading || !state.account?.personal) return;
+  try { await api(`/api/accounts/${state.account.id}/versions`, { method: 'POST', body: '{}' }); await loadVersions(); toast('当前版本已备份'); }
+  catch (error) { toast(error.message, true); }
+};
+$('download-version').onclick = () => {
+  if (!state.account?.personal || !$('version-select').value) return;
+  const link = document.createElement('a'); link.href = `/api/accounts/${state.account.id}/versions/${$('version-select').value}/download`; link.download = '历史配置.zip'; link.click();
+};
+$('rollback-version').onclick = async () => {
+  if (state.loading || !state.account?.personal || !$('version-select').value || !confirmDiscard()) return;
+  if (!window.confirm('先备份当前配置，再恢复此版本的四种 App 输出。恢复后作为整文件覆盖保留；恢复默认可重新采用个人策略生成的配置。')) return;
+  const identifier = state.account.id, version = $('version-select').value; setLoading(true);
+  try {
+    const result = await api(`/api/accounts/${identifier}/versions/${version}/restore`, { method: 'POST', body: JSON.stringify({ etag: state.versionEtag }) });
+    state.accounts = result.accounts; state.dirty = false; setLoading(false); await selectAccount(state.accounts.find(a => a.id === identifier)); toast('已回滚四种 App，回滚前版本已备份');
+  } catch (error) { toast(error.message, true); } finally { setLoading(false); }
+};
 $('search').oninput = renderAccounts;
 for (const tab of document.querySelectorAll('.client-tab')) tab.onclick = async () => { if (state.loading || !state.account || tab.dataset.client === state.client || !confirmDiscard()) return; state.client = tab.dataset.client; state.file = clients[state.client].files[0]; updateClient(); await loadFile(); };
 $('file-select').onchange = async () => { if (state.loading || !confirmDiscard()) { $('file-select').value = state.file; return; } state.file = $('file-select').value; await loadFile(); };

@@ -117,3 +117,50 @@ test('Stash has a distinct YAML export and a private LAN rule without an inline 
   expect(friend.rules.at(-1)).toBe('MATCH,FINAL');
   expect(friend['proxy-groups'].find(group => group.name === 'FINAL').proxies).toEqual(['DIRECT', 'PROXY']);
 });
+
+test('iPhone preferences merge into four apps, back up, download and roll back without changing peers', async ({ page }) => {
+  await page.goto('/');
+  const inventory = (await (await page.request.get('/api/accounts')).json()).accounts;
+  const phone = inventory.find(a => a.label === '我的 iPhone');
+  const peers = inventory.filter(a => a.id !== phone.id);
+  const peerContents = await Promise.all(peers.map(async a => (await (await page.request.get(`/api/accounts/${a.id}/files/stash.yaml`)).json()).content));
+  await page.locator('#accounts button').filter({ hasText: '我的 iPhone' }).click();
+  await expect(page.locator('#version-bar')).toBeVisible();
+  await expect(page.getByRole('tab', { name: '内网规则', exact: true })).toBeHidden();
+  await page.locator('#backup-version').click();
+  await expect(page.locator('#toast')).toContainText('当前版本已备份');
+  await expect.poll(() => page.locator('#version-select option').count()).toBeGreaterThan(0);
+  const oldVersion = await page.locator('#version-select').inputValue();
+  await page.getByRole('tab', { name: '个人策略', exact: true }).click();
+  await expect(page.locator('#validation-status')).toHaveText('JSON 语法通过');
+  const original = (await (await page.request.get(`/api/accounts/${phone.id}/personal`)).json()).content;
+  const changed = JSON.parse(original); changed.defaults.MICROSOFT = 'PROXY';
+  await page.locator('.monaco-editor').click();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+  await page.keyboard.insertText(JSON.stringify(changed, null, 2));
+  const savedResponse = page.waitForResponse(response => response.url().endsWith(`/api/accounts/${phone.id}/personal`) && response.request().method() === 'PUT');
+  await page.locator('#save').click();
+  const saved = await savedResponse;
+  expect(saved.status(), JSON.stringify(await saved.json())).toBe(200);
+  await expect(page.locator('#account-subtitle')).toContainText('MICROSOFT PROXY');
+  await expect(page.locator('#save-status')).toContainText('未修改');
+  for (const name of ['mihomo.yaml', 'stash.yaml']) {
+    const content = (await (await page.request.get(`/api/accounts/${phone.id}/files/${name}`)).json()).content;
+    expect(parse(content)['proxy-groups'].find(g => g.name === 'MICROSOFT').proxies[0]).toBe('PROXY');
+  }
+  const downloadEvent = page.waitForEvent('download');
+  await page.locator('#download-version').click();
+  expect((await downloadEvent).suggestedFilename()).toContain('version-');
+  await page.locator('#version-select').selectOption(oldVersion);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#rollback-version').click();
+  await expect(page.locator('#toast')).toContainText('已回滚');
+  const restored = parse((await (await page.request.get(`/api/accounts/${phone.id}/files/stash.yaml`)).json()).content);
+  expect(restored['proxy-groups'].find(g => g.name === 'MICROSOFT').proxies[0]).toBe('DIRECT');
+  for (let i = 0; i < peers.length; i++) {
+    expect((await (await page.request.get(`/api/accounts/${peers[i].id}/files/stash.yaml`)).json()).content).toBe(peerContents[i]);
+  }
+  await page.locator('#accounts button').filter({ hasText: '演示账号' }).click();
+  await expect(page.locator('#version-bar')).toBeHidden();
+  await expect(page.getByRole('tab', { name: '个人策略', exact: true })).toBeHidden();
+});

@@ -15,6 +15,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'deployment'))
 import console as c
+from test_personal import preferences
 
 
 class ConsoleTests(unittest.TestCase):
@@ -145,3 +146,35 @@ class ConsoleTests(unittest.TestCase):
             self.assertEqual(private.read_text(), changed)
         self.assertEqual(self.request(path, headers={'Origin': 'https://evil.example'})[0], 403)
         self.assertEqual(self.request(path, 'DELETE', {'etag': current['etag']})[0], 405)
+
+    def test_personal_settings_and_versions_are_scoped_and_restore_conflicts_are_checked(self):
+        path = self.state / 'personal-settings/phone.json'
+        c.d.atomic_write(path, json.dumps(preferences()))
+        self.records[0]['personal_path'] = str(path)
+        self.server.console.config['personal_profiles'] = {'phone': str(path)}
+        (self.state / 'profiles.json').write_text(json.dumps({'accounts': self.records}))
+        prefix = '/api/accounts/' + self.identifier
+        original = json.loads(self.request(prefix + '/personal')[1])
+        friend_before = {n: Path(p).read_bytes() for n, p in self.records[1]['files'].items()}
+        changed = preferences(); changed['defaults']['MICROSOFT'] = 'PROXY'
+        with patch.object(self.server.console, 'regenerate'):
+            self.assertEqual(self.request(prefix + '/personal', 'PUT', {'content': json.dumps(changed), 'etag': 'stale'})[0], 409)
+            self.assertEqual(self.request(prefix + '/personal', 'PUT', {'content': json.dumps(changed), 'etag': original['etag']})[0], 200)
+        self.assertEqual(json.loads(path.read_text())['defaults']['MICROSOFT'], 'PROXY')
+        listing = json.loads(self.request(prefix + '/versions')[1]); self.assertEqual(len(listing['versions']), 1)
+        version = listing['versions'][0]['version']
+        download = self.request(prefix + '/versions/' + version + '/download')
+        self.assertEqual(download[0], 200)
+        with zipfile.ZipFile(io.BytesIO(download[1])) as archive:
+            self.assertEqual(archive.read('surge.conf'), Path(self.records[0]['files']['surge.conf']).read_bytes())
+        c.d.atomic_write(self.records[0]['files']['stash.yaml'], 'changed-in-another-tab')
+        restore = prefix + '/versions/' + version + '/restore'
+        self.assertEqual(self.request(restore, 'POST', {'etag': listing['etag']})[0], 409)
+        listing = json.loads(self.request(prefix + '/versions')[1])
+        with patch.object(self.server.console, 'regenerate'):
+            self.assertEqual(self.request(restore, 'POST', {'etag': listing['etag']})[0], 200)
+        self.assertEqual((self.state / 'profile-overrides' / self.identifier / 'stash.yaml').read_text(), '[Rule]\nFINAL,PROXY\nowner')
+        for name, body in friend_before.items():
+            self.assertEqual(Path(self.records[1]['files'][name]).read_bytes(), body)
+        self.assertEqual(self.request('/api/accounts/' + self.other + '/personal')[0], 404)
+        self.assertEqual(self.request('/api/accounts/' + self.other + '/versions')[0], 404)

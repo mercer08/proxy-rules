@@ -71,7 +71,56 @@ class Console:
         return [{'id': self.identity(r), 'label': r['label'],
                  'businessRules': r['business_rules'], 'nodes': r['nodes'],
                  'finalPolicy': r.get('final_policy', 'PROXY' if r['business_rules'] else 'DIRECT'),
-                 'edited': r.get('edited', []), 'files': list(r['files'])} for r in self.records()]
+                 'edited': r.get('edited', []), 'files': list(r['files']),
+                 'personal': bool(r.get('personal_path')), 'defaults': r.get('personal_defaults', {})} for r in self.records()]
+
+    def personal_settings(self, identifier):
+        record = self.account(identifier)
+        if not record.get('personal_path'):
+            raise ConsoleError(404, '此账号未启用个人策略')
+        path = Path(record['personal_path'])
+        if path not in d.personal.settings_paths(self.config).values():
+            raise ConsoleError(500, '个人策略路径异常')
+        content = path.read_text()
+        return {'name': 'personal.json', 'content': content, 'etag': hashlib.sha256(content.encode()).hexdigest(), 'edited': False}
+
+    def edit_personal(self, identifier, content, etag):
+        previous = self.personal_settings(identifier)
+        if etag != previous['etag']:
+            raise ConsoleError(409, '个人策略已变化，请重新加载')
+        try:
+            if not isinstance(content, str) or len(content.encode()) > MAX_EDIT:
+                raise ValueError()
+            d.personal.validate(json.loads(content))
+        except (ValueError, TypeError, KeyError):
+            raise ConsoleError(400, '个人策略格式或参数不正确') from None
+        record = self.account(identifier)
+        d.versions.backup(self.config, record, identifier, d.atomic_write, 'before-preference-edit')
+        path = Path(record['personal_path'])
+        d.atomic_write(path, content)
+        try:
+            self.regenerate()
+        except Exception:
+            d.atomic_write(path, previous['content'])
+            raise ConsoleError(503, '生成失败，个人策略未保存') from None
+        return self.personal_settings(identifier)
+
+    def account_versions(self, identifier):
+        record = self.account(identifier)
+        if not record.get('personal_path'):
+            raise ConsoleError(404, '此账号未启用版本备份')
+        return {'versions': d.versions.list_versions(self.config, identifier), 'etag': d.versions.account_etag(record)}
+
+    def restore_version(self, identifier, version, etag):
+        record = self.account(identifier)
+        self.account_versions(identifier)
+        if d.versions.account_etag(record) != etag:
+            raise ConsoleError(409, '配置已变化，请重新加载后回滚')
+        try:
+            d.versions.restore(self.config, record, identifier, version, d.atomic_write, self.regenerate)
+        except ValueError:
+            raise ConsoleError(400, '版本校验失败或节点凭据已经改变，未回滚') from None
+        return {'accounts': self.list_accounts()}
 
     def regenerate(self):
         with contextlib.redirect_stdout(sys.stderr):
@@ -204,6 +253,28 @@ class Handler(BaseHTTPRequestHandler):
             app = self.server.console
             if path.startswith('/api/'):
                 with app.lock():
+                    personal_match = re.fullmatch(r'/api/accounts/([a-f0-9]{24})/(personal|versions(?:/([0-9]+-[a-f0-9]{12})/(download|restore))?)', path)
+                    if personal_match:
+                        identifier, action, version, command = personal_match.groups()
+                        if action == 'personal':
+                            if method == 'GET':
+                                return self.json(app.personal_settings(identifier))
+                            if method == 'PUT':
+                                body = self.request_body()
+                                return self.json(app.edit_personal(identifier, body.get('content'), body.get('etag')))
+                        else:
+                            listing = app.account_versions(identifier)
+                            if action == 'versions':
+                                if method == 'GET':
+                                    return self.json(listing)
+                                if method == 'POST':
+                                    return self.json(d.versions.backup(app.config, app.account(identifier), identifier, d.atomic_write, 'manual-backup'))
+                            if command == 'download' and method == 'GET':
+                                return self.send(200, d.versions.package(app.config, identifier, version), 'application/zip', 'version-' + version + '.zip')
+                            if command == 'restore' and method == 'POST':
+                                body = self.request_body()
+                                return self.json(app.restore_version(identifier, version, body.get('etag')))
+                        raise ConsoleError(405, '操作不支持')
                     if path == '/api/private-rules/lan-com':
                         if method == 'GET':
                             return self.json(app.private_lan())
