@@ -125,6 +125,9 @@ def service_state(config):
 
 
 def choices(settings, group):
+    # AI always uses the proxy across every client, including older preferences.
+    if group == 'AI':
+        return ['PROXY']
     first = settings.get('defaults', {}).get(group, DEFAULTS[group])
     return [first, 'DIRECT' if first == 'PROXY' else 'PROXY']
 

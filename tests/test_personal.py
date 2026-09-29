@@ -94,7 +94,12 @@ class PersonalTests(unittest.TestCase):
             config['personal_profiles'] = {'phone': str(settings_file)}
             after = d.render_profiles(config, account, converted, '', root, digest)
             self.assertEqual(before, after)  # Merely enabling infrastructure changes no legacy output.
-            phone = d.render_profiles(config, {**account, 'personal': preferences()}, converted, '', root, digest)
+            legacy_preferences = {**preferences(), 'defaults': {'AI': 'DIRECT'}}
+            phone = d.render_profiles(config, {**account, 'personal': legacy_preferences}, converted, '', root, digest)
+            for name in ('surge.conf', 'shadowrocket.conf'):
+                ai = next(line for line in phone[name].splitlines() if line.startswith('AI = select'))
+                self.assertNotIn('DIRECT', ai)
+                self.assertEqual(ai.split(',')[1].strip(), 'PROXY')
             for name in ('node.txt', 'shadowrocket.txt'):
                 self.assertEqual(before[name], phone[name])
             self.assertIn('HOME = subnet, default=DEVICE:HOME_MAC, ROUTER:192.168.50.1=DIRECT', phone['surge.conf'])
@@ -104,6 +109,7 @@ class PersonalTests(unittest.TestCase):
             self.assertLess(phone['surge.conf'].index('/youtube.list,YOUTUBE'), phone['surge.conf'].index('/google.list,GOOGLE'))
             for name in ('stash.yaml', 'mihomo.yaml'):
                 parsed = yaml.safe_load(phone[name]); groups = {g['name']: g['proxies'] for g in parsed['proxy-groups']}
+                self.assertEqual(groups['AI'], ['PROXY'])
                 self.assertEqual(groups['MICROSOFT'][0], 'DIRECT')
                 self.assertEqual(groups['PAYPAL'][0], 'DIRECT')
                 self.assertEqual(groups['FINAL'][0], 'PROXY')

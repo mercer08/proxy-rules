@@ -171,3 +171,7 @@ jsDelivr 可达性需要在实际网络测试，无法保证所有大陆线路�
 私有服务配置设置 `global_service_groups: true` 后，所有启用账号的 Surge、Mihomo、Stash、Shadowrocket 输出加入 `MICROSOFT`、`PAYPAL`，默认 DIRECT，可切换 PROXY。两个规则集使用独立 services 快照的 CDN 文件，在宽泛代理/直连规则前匹配；Mihomo 的 DNS 也通过对应组查询。Stash 不加入 Mihomo 专属的 rule-set DNS 键。
 
 这不会为其他账号启用 iPhone 的个人策略，也不改节点、私有 LAN、AI/APPLE/FINAL 默认值或账号额度。已有个人输出包含这两个组时保持原样。整份手工覆盖仍会冻结输出；同步前须核对覆盖状态。普通规则更新不会替代已导入的完整配置，用户仍需重新下载并导入。
+
+### 全员 AI 固定代理
+
+所有账号和设备的 Surge、Shadowrocket、Mihomo、Stash 配置中，AI 策略组仅保留 PROXY，移除 DIRECT 选择。个人偏好中的旧 AI 默认值不再影响输出。AI 规则内容、其他策略组默认值和节点文件不变。整文件手工覆盖需在部署时检查并针对 AI 组迁移，否则会保留旧选择。已导入的客户端需重新下载并导入配置。
