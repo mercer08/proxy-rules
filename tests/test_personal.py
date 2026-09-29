@@ -141,6 +141,38 @@ class PersonalTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 versions.read_version(config, identifier, '../escape')
 
+    def test_global_microsoft_paypal_preserve_every_other_setting_and_personal_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state=Path(temporary);config,root,digest,node,converted=fixture(state)
+            services(state)
+            for business in (False,True):
+                account={'label':'fixture','nodes':[node],'business_rules':business,'final_policy':'PROXY' if business else 'DIRECT'}
+                before=d.render_profiles(config,account,converted,'',root,digest)
+                enabled={**config,'global_service_groups':True}
+                after=d.render_profiles(enabled,account,converted,'',root,digest)
+                self.assertEqual(after,personal.render_global_services(after,enabled,d.yaml_block))
+                for name in ('node.txt','shadowrocket.txt'):
+                    self.assertEqual(before[name],after[name])
+                for name in ('surge.conf','shadowrocket.conf'):
+                    self.assertIn('MICROSOFT = select, DIRECT, PROXY',after[name])
+                    self.assertIn('PAYPAL = select, DIRECT, PROXY',after[name])
+                    cleaned='\n'.join(l for l in after[name].splitlines() if not l.startswith(('MICROSOFT =','PAYPAL =')) and not (l.startswith('RULE-SET,') and ('/microsoft.list,' in l or '/paypal.list,' in l)))+'\n'
+                    self.assertEqual(before[name],cleaned)
+                for name in ('mihomo.yaml','stash.yaml'):
+                    old=yaml.safe_load(before[name]);new=yaml.safe_load(after[name])
+                    groups={g['name']:g for g in new['proxy-groups']}
+                    self.assertEqual(groups['MICROSOFT']['proxies'],['DIRECT','PROXY'])
+                    self.assertEqual(groups['PAYPAL']['proxies'],['DIRECT','PROXY'])
+                    new['proxy-groups']=[g for g in new['proxy-groups'] if g['name'] not in ('MICROSOFT','PAYPAL')]
+                    for n in ('microsoft','paypal'):
+                        new['rule-providers'].pop('svc-'+n)
+                        new['rules'].remove('RULE-SET,svc-'+n+','+n.upper())
+                        if name=='mihomo.yaml':new['dns']['nameserver-policy'].pop('rule-set:svc-'+n)
+                    self.assertEqual(old,new)
+                personal_account={**account,'personal':preferences()}
+                personal_config={**config,'personal_profiles':{'fixture':str(state/'personal-settings/fixture.json')}}
+                self.assertEqual(d.render_profiles(personal_config,personal_account,converted,'',root,digest),d.render_profiles({**personal_config,'global_service_groups':True},personal_account,converted,'',root,digest))
+
     def test_failed_restore_keeps_existing_override_and_detects_corrupt_backups(self):
         with tempfile.TemporaryDirectory() as temporary:
             state = Path(temporary); record = {'label': 'phone', 'files': {}}

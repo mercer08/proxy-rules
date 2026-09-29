@@ -165,3 +165,9 @@ jsDelivr 可达性需要在实际网络测试，无法保证所有大陆线路�
 拒绝恢复旧文件。回滚前再备份当前版本，只恢复对应账号的四份 App 配置，节点文件
 和其他账号不变。回滚结果作为整文件覆盖保留；每份文件点“恢复默认”即可重新采用
 当前个人策略和规则生成的版本。版本不自动过期或删除，应定期加密导出并检查磁盘使用。
+
+### 全员 Microsoft / PayPal 分组
+
+私有服务配置设置 `global_service_groups: true` 后，所有启用账号的 Surge、Mihomo、Stash、Shadowrocket 输出加入 `MICROSOFT`、`PAYPAL`，默认 DIRECT，可切换 PROXY。两个规则集使用独立 services 快照的 CDN 文件，在宽泛代理/直连规则前匹配；Mihomo 的 DNS 也通过对应组查询。Stash 不加入 Mihomo 专属的 rule-set DNS 键。
+
+这不会为其他账号启用 iPhone 的个人策略，也不改节点、私有 LAN、AI/APPLE/FINAL 默认值或账号额度。已有个人输出包含这两个组时保持原样。整份手工覆盖仍会冻结输出；同步前须核对覆盖状态。普通规则更新不会替代已导入的完整配置，用户仍需重新下载并导入。

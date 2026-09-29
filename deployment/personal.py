@@ -67,7 +67,7 @@ def inputs(config):
 
 
 def mirror_services(config, fetch, atomic_write):
-    if not config.get('personal_profiles'):
+    if not config.get('personal_profiles') and not config.get('global_service_groups'):
         return
     state = Path(config['state_dir'])
     repo = config['repository']
@@ -108,7 +108,7 @@ def mirror_services(config, fetch, atomic_write):
 
 
 def service_state(config):
-    if not config.get('personal_profiles'):
+    if not config.get('personal_profiles') and not config.get('global_service_groups'):
         return None
     pointer = json.loads((Path(config['state_dir']) / 'personal-services.json').read_text())
     digest, tag = pointer['digest'], pointer['tag']
@@ -141,6 +141,59 @@ def prefix_rules(settings, private, client):
     rules += [r + ',COMPANY_LAN' for r in dict.fromkeys(settings.get('company_rules', []) + private)]
     rules += [('IP-CIDR6' if ':' in n else 'IP-CIDR') + ',' + n + ',HOME,no-resolve' for n in settings.get('home_networks', [])]
     return rules
+
+
+def render_global_services(profiles, config, yaml_block):
+    """Add only Microsoft and PayPal to every account; preserve personal profiles."""
+    if not config.get('global_service_groups'):
+        return profiles
+    pointer = service_state(config)
+    origin = 'https://cdn.jsdelivr.net/gh/' + config['repository'] + '@' + pointer['tag'] + '/'
+    output = dict(profiles)
+    names = ('microsoft', 'paypal')
+    for filename, text in profiles.items():
+        if filename not in ('surge.conf', 'shadowrocket.conf', 'mihomo.yaml', 'stash.yaml'):
+            continue
+        if filename.endswith('.conf'):
+            missing = [n for n in names if not re.search(r'(?m)^' + n.upper() + r'\s*=', text)]
+            rules_missing = [n for n in names if not re.search(r'(?m)^RULE-SET,[^\n]*?/' + n + r'\.list,' + n.upper() + r'(?:,|$)', text)]
+            if not missing and not rules_missing:
+                continue
+            header, body = text.split('[Rule]\n', 1)
+            groups = [n.upper() + ' = select, DIRECT, PROXY' + (', policy-select-name=DIRECT' if filename == 'shadowrocket.conf' else '') for n in missing]
+            header += '\n'.join(groups) + '\n' if groups else ''
+            lines = body.splitlines()
+            index = next((i for i,l in enumerate(lines) if '/proxy.' in l or l.startswith('FINAL,')), len(lines))
+            lines[index:index] = ['RULE-SET,' + origin + n + '.list,' + n.upper() + ',update-interval=86400' for n in rules_missing]
+            output[filename] = header + '[Rule]\n' + '\n'.join(lines) + '\n'
+        else:
+            missing = [n for n in names if not re.search(r'(?m)^\s*-\s*$\n\s+name: "' + n.upper() + '"$', text)]
+            rules_missing = [n for n in names if 'RULE-SET,svc-' + n + ',' + n.upper() not in text]
+            if not missing and not rules_missing:
+                continue
+            if missing:
+                groups = [{'name': n.upper(), 'type': 'select', 'proxies': ['DIRECT', 'PROXY']} for n in missing]
+                text, count = re.subn(r'(?ms)^proxy-groups:\n.*?(?=^[a-z][a-z0-9-]*:|\Z)',
+                                     lambda m: m.group().rstrip() + '\n' + '\n'.join(yaml_block(groups, 2)) + '\n', text, count=1)
+                if count != 1:
+                    raise ValueError('Missing client proxy groups')
+            providers = {('svc-' + n): {'type': 'http', 'behavior': 'classical', 'url': origin + n + '.yaml',
+                                       'path': './rules/services-' + n + '.yaml', 'interval': 86400} for n in rules_missing}
+            if providers:
+                marker = text.index('rules:\n')
+                text = text[:marker] + '\n'.join(yaml_block(providers, 2)) + '\n' + text[marker:]
+            if filename == 'mihomo.yaml':
+                policies = {'rule-set:svc-' + n: ['https://dns.alidns.com/dns-query#' + n.upper()] for n in rules_missing}
+                text, count = re.subn(r'(?ms)^  nameserver-policy:\n.*?(?=^  \S|^[a-z]|\Z)',
+                                     lambda m: m.group().rstrip() + '\n' + '\n'.join(yaml_block(policies, 4)) + '\n', text, count=1)
+                if policies and count != 1:
+                    raise ValueError('Missing Mihomo DNS policy')
+            header, body = text.split('rules:\n', 1)
+            lines = body.splitlines()
+            index = next((i for i,l in enumerate(lines) if 'RULE-SET,proxy,' in l or 'MATCH,' in l), len(lines))
+            lines[index:index] = ['  - ' + json.dumps('RULE-SET,svc-' + n + ',' + n.upper()) for n in rules_missing]
+            output[filename] = header + 'rules:\n' + '\n'.join(lines) + '\n'
+    return output
 
 
 def render(profiles, config, account, private, yaml_block):

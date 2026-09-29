@@ -570,7 +570,7 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
             "node.txt": "\n".join(uris) + "\n",
             "shadowrocket.conf": shadowrocket}
     private = parse_private_lan(private_lan_path(config).read_text()) if account.get('personal') and business_rules else []
-    return personal.render(profiles, config, account, private, yaml_block)
+    return personal.render_global_services(personal.render(profiles, config, account, private, yaml_block), config, yaml_block)
 
 
 def generate(config):
@@ -632,6 +632,7 @@ def generate(config):
         shared.mkdir()
         shadowrocket = render_shadowrocket(config, rules_dir, digest,
                                            config["public_url"].rstrip("/") + "/proxy-config/shadowrocket.conf")
+        shadowrocket = personal.render_global_services({'shadowrocket.conf': shadowrocket}, config, yaml_block)['shadowrocket.conf']
         (shared / "shadowrocket.conf").write_text(shadowrocket)
         os.chmod(staging, 0o700)
         for path in staging.rglob("*"):
