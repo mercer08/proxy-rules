@@ -49,6 +49,14 @@
       "file": "telegramcidr.txt",
       "kind": "ip",
       "minimum": 1
+    },
+    "apple": {
+      "file": "apple.txt",
+      "additional_files": [
+        "icloud.txt"
+      ],
+      "kind": "domain",
+      "minimum": 20
     }
   },
   "count_change_limits": {

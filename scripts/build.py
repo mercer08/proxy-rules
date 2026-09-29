@@ -152,6 +152,7 @@ def effective_groups(sets, custom, ads, config=None):
         (sets["private"], "DIRECT"), (sets["lan"], "DIRECT"),
         *[(custom[name], policy) for name, policy in custom_order(config or {})],
         (sets["reject"] if ads else set(), "REJECT"),
+        (sets.get("apple", set()), "DIRECT"),
         (sets["proxy"], "PROXY"), (sets["direct"], "DIRECT"),
         (sets["telegram"], "PROXY"), (sets["cn"], "DIRECT")]
 
@@ -216,13 +217,13 @@ def render(output, sets, custom, config):
     base = "https://raw.githubusercontent.com/" + config["publish_repository"] + "/release/"
     order = [("private", "DIRECT"), ("lan", "DIRECT"),
              *[(custom_output_name(name), policy) for name, policy in custom_order(config)],
-             ("reject", "REJECT"), ("proxy", "PROXY"), ("direct", "DIRECT"),
+             ("reject", "REJECT"), *(([("apple", "APPLE")] if "apple" in sets else [])), ("proxy", "PROXY"), ("direct", "DIRECT"),
              ("telegram", "PROXY"), ("cn", "DIRECT")]
     for ads in (False, True):
         suffix = "-ads" if ads else ""
         active = [(name, policy) for name, policy in order if all_sets[name] and (ads or name != "reject")]
         for client in ("surge", "shadowrocket"):
-            lines = ["# Rule fragment only: define a PROXY policy/group in your profile.", "[Rule]"]
+            lines = ["# Rule fragment only: define PROXY and APPLE policy/groups in your profile.", "[Rule]"]
             for name, policy in active:
                 domainset = client == "surge" and name in sets and config["sets"][name]["kind"] == "domain"
                 rule_type = "DOMAIN-SET" if domainset else "RULE-SET"
@@ -230,7 +231,7 @@ def render(output, sets, custom, config):
                 lines.append("%s,%s%s/%s%s,%s" % (rule_type, base, client, name, ext, policy))
             lines.append("FINAL," + config["default_policy"])
             write(output / client / ("rules" + suffix + ".conf"), "\n".join(lines) + "\n")
-        lines = ["# Merge this fragment into a full profile with a PROXY group.", "rule-providers:"]
+        lines = ["# Merge this fragment into a full profile with PROXY and APPLE groups.", "rule-providers:"]
         for name, _ in active:
             behavior = config["sets"][name]["kind"] if name in sets else "classical"
             if behavior == "ip":
@@ -250,6 +251,8 @@ def render(output, sets, custom, config):
 
 
 def build(root, output, input_dir=None, commit=None, previous=None):
+    if (root / "custom/lan-com.list").exists():
+        raise ValueError("Private LAN file must not exist in the public source tree")
     config = json.loads((root / "sources.json").read_text())
     upstream = config["upstream"]
     if not re.fullmatch(r"[\w.-]+/[\w.-]+", upstream["repository"]):
@@ -264,13 +267,14 @@ def build(root, output, input_dir=None, commit=None, previous=None):
     if set(excludes) - set(config["sets"]):
         raise ValueError("Unknown exclusion category")
     for name, source in config["sets"].items():
-        filename = source["file"]
-        if not re.fullmatch(r"[a-z]+\.txt", filename):
-            raise ValueError("Invalid source filename")
-        raw = (input_dir / filename).read_bytes() if input_dir else fetch(
-            "https://raw.githubusercontent.com/%s/%s/%s" % (upstream["repository"], commit, filename))
-        raw_hashes[filename] = hashlib.sha256(raw).hexdigest()
-        rules = parse_upstream(raw.decode("utf-8-sig"), source["kind"])
+        rules = set()
+        for filename in [source["file"], *source.get("additional_files", [])]:
+            if not re.fullmatch(r"[a-z]+\.txt", filename):
+                raise ValueError("Invalid source filename")
+            raw = (input_dir / filename).read_bytes() if input_dir else fetch(
+                "https://raw.githubusercontent.com/%s/%s/%s" % (upstream["repository"], commit, filename))
+            raw_hashes[filename] = hashlib.sha256(raw).hexdigest()
+            rules.update(parse_upstream(raw.decode("utf-8-sig"), source["kind"]))
         if len(rules) < source["minimum"]:
             raise ValueError("Source below minimum count: " + name)
         removals = {validate_rule(line) for line in excludes.get(name, [])}
@@ -307,6 +311,10 @@ def build(root, output, input_dir=None, commit=None, previous=None):
             raise ValueError("Advertising exception is covered by a broader block; use exclude.json: " + str(sorted(broader)))
         sets["reject"] = {block for block in sets["reject"]
                           if not (block == rule or (rule[0] == "DOMAIN-SUFFIX" and matches(rule, domain=block[1])))}
+    # Dedicated Apple routing owns exact duplicate entries formerly in the
+    # aggregate sets; broad parent rules remain behind APPLE in rule order.
+    for name in ("direct", "proxy"):
+        sets[name] -= sets.get("apple", set())
     counts = {name: len(rules) for name, rules in sets.items()}
     check_counts(counts, previous, config["count_change_limits"])
     cases = json.loads((root / "tests/cases.json").read_text())

@@ -26,7 +26,7 @@ import urllib.request
 MAX_BUNDLE = 32 * 1024 * 1024
 MAX_EXPANDED = 96 * 1024 * 1024
 BUSINESS_RULE_SETS = {"lan-com", "wan-com", "futu-broker"}
-PROFILE_FILES = ("surge.conf", "mihomo.yaml", "shadowrocket.conf", "shadowrocket.txt", "node.txt")
+PROFILE_FILES = ("surge.conf", "mihomo.yaml", "stash.yaml", "shadowrocket.conf", "shadowrocket.txt", "node.txt")
 
 
 def profile_overrides(state):
@@ -227,7 +227,8 @@ def load_accounts(config, now=None):
                 label = config.get("account_labels", {}).get(email, email)
                 account = accounts.setdefault(account_id, {
                     "label": label, "nodes": [], "expiry": expiry,
-                    "business_rules": email in business_accounts})
+                    "business_rules": email in business_accounts,
+                    "final_policy": "PROXY" if email in config.get("proxy_final_accounts", business_accounts) else "DIRECT"})
                 node = {"name": mapping["name"], "type": "vmess", "server": config["server"],
                         "port": config["port"], "uuid": client["id"], "alterId": 0,
                         "cipher": "aes-128-gcm", "tls": True, "skip-cert-verify": False,
@@ -323,7 +324,9 @@ def verify_cdn(config, rules_dir, digest):
 
 
 def private_lan_path(config):
-    return Path(config.get("private_lan_file", str(Path(config["state_dir"]) / "private-rules/lan-com.list")))
+    if config.get("private_lan_file"):
+        return Path(config["private_lan_file"])
+    return Path(config["state_dir"]) / "private-rules/lan-com.list"
 
 
 def parse_private_lan(content):
@@ -417,7 +420,39 @@ def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=F
         MANAGED_URL="", PROXY_GROUP_OPTIONS=options, PROXIES="\n".join(shadowrocket_proxy(node) for node in (proxies or [])))
     text = re.sub(r"(?m)^update-url\s*=.*\n?", "", text)
     fragment = prepare_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", config, rules_dir, digest, business_rules)
-    return text + fragment
+    text += "APPLE = select,DIRECT,PROXY, policy-select-name=DIRECT\n"
+    return text + final_rules(fragment, "shadowrocket", business_rules)
+
+
+def final_rules(fragment, client, owner):
+    policy = "PROXY" if owner else "DIRECT"
+    if client in ("mihomo", "stash"):
+        return re.sub(r'(?m)^  - "MATCH,(?:PROXY|DIRECT)"$', '  - "MATCH,' + policy + '"', fragment)
+    return re.sub(r"(?m)^FINAL,(?:PROXY|DIRECT)$", "FINAL," + policy, fragment)
+
+
+def render_stash(config, account, proxies, rules_dir, digest):
+    """Stash export avoids Mihomo-only inline providers and rule-set DNS keys."""
+    owner = account.get("final_policy", "PROXY" if account.get("business_rules") else "DIRECT") == "PROXY"
+    fragment = strip_private_rule_references((rules_dir / "mihomo/rules.yaml").read_text(), "mihomo")
+    fragment = select_rules(fragment, "mihomo", account.get("business_rules", False))
+    patterns = ["localhost", "+.local", "+.lan", "+.home.arpa"]
+    if account.get("business_rules"):
+        private = parse_private_lan(private_lan_path(config).read_text())
+        rules = "".join("  - " + json.dumps(rule + ",DIRECT") + "\n" for rule in private)
+        marker = r'(?m)^(  - "RULE-SET,(?:wan-com|futu-broker|apple|proxy),|  - "MATCH,)'
+        fragment = re.sub(marker, lambda m: rules + m.group(), fragment, count=1)
+        patterns += [("+." if rule.startswith("DOMAIN-SUFFIX,") else "") + rule.split(",")[1] for rule in private]
+    base = {"mode": "rule", "log-level": "info", "ipv6": False,
+            "proxies": proxies,
+            "proxy-groups": [{"name": "PROXY", "type": "select", "proxies": [p["name"] for p in proxies]},
+                             {"name": "APPLE", "type": "select", "proxies": ["DIRECT", "PROXY"]}],
+            "dns": {"nameserver": ["https://dns.alidns.com/dns-query"],
+                    "nameserver-policy": {p: "system" for p in dict.fromkeys(patterns)},
+                    "fake-ip-filter": list(dict.fromkeys(patterns))}}
+    # Stash HTTP providers do not need the Mihomo-only download proxy key.
+    fragment = re.sub(r"(?m)^    proxy: PROXY\n", "", fragment)
+    return "\n".join(yaml_block(base)) + "\n" + final_rules(rewrite_rules(fragment, config, digest), "stash", owner)
 
 
 def yaml_block(value, indent=0):
@@ -454,10 +489,12 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
         common, MANAGED_URL="", PROXIES="\n".join(surge_lines))
     surge = re.sub(r"(?m)^#!MANAGED-CONFIG.*\n?", "", surge)
     business_rules = bool(account.get("business_rules", False))
+    surge += "APPLE = select, DIRECT, PROXY\n"
     surge += prepare_rules((rules_dir / "surge/rules.conf").read_text(), "surge", config, rules_dir, digest, business_rules)
     mihomo_base = json.loads((templates / "mihomo.json").read_text())
     mihomo_base["proxies"] = proxies
-    mihomo_base["proxy-groups"] = [{"name": "PROXY", "type": "select", "proxies": names}]
+    mihomo_base["proxy-groups"] = [{"name": "PROXY", "type": "select", "proxies": names},
+                                   {"name": "APPLE", "type": "select", "proxies": ["DIRECT", "PROXY"]}]
     fragment = prepare_rules((rules_dir / "mihomo/rules.yaml").read_text(), "mihomo", config, rules_dir, digest, business_rules)
     # DNS classifications follow the same ordered domain rules, including custom
     # overrides; do not let a broad domestic set override an explicit proxy set.
@@ -472,6 +509,8 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
             continue
         if name in ("private", "lan-com"):
             resolver = ["system"]
+        elif policy == "APPLE":
+            resolver = ["https://dns.alidns.com/dns-query#APPLE"]
         elif policy == "DIRECT":
             resolver = ["https://dns.alidns.com/dns-query"]
         elif policy == "PROXY":
@@ -499,11 +538,13 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
     uris = uri.splitlines()
     if len(uris) != len(names) or any(not line.startswith("vmess://") for line in uris):
         raise ValueError("Unexpected URI node list")
-    return {"surge.conf": surge, "mihomo.yaml": mihomo,
+    owner = account.get("final_policy", "PROXY" if business_rules else "DIRECT") == "PROXY"
+    shadowrocket = render_shadowrocket(config, rules_dir, digest, "", business_rules, proxies=proxies)
+    return {"surge.conf": final_rules(surge, "surge", owner), "mihomo.yaml": final_rules(mihomo, "mihomo", owner),
+            "stash.yaml": render_stash(config, account, proxies, rules_dir, digest),
             "shadowrocket.txt": base64.b64encode(("\n".join(uris) + "\n").encode()).decode() + "\n",
             "node.txt": "\n".join(uris) + "\n",
-            "shadowrocket.conf": render_shadowrocket(
-                config, rules_dir, digest, origin + "/profiles/" + token + "/shadowrocket.conf", business_rules, proxies=proxies)}
+            "shadowrocket.conf": final_rules(shadowrocket, "shadowrocket", owner)}
 
 
 def generate(config):
@@ -553,6 +594,7 @@ def generate(config):
                 (directory / name).write_text(content)
             records.append({"label": account["label"], "business_rules": account["business_rules"],
                             "nodes": [n["name"] for n in account["nodes"]], "edited": edited,
+                            "final_policy": account.get("final_policy", "PROXY" if account["business_rules"] else "DIRECT"),
                             "files": {name: str(profiles_root / "current" / folder / name) for name in profiles}})
         shared = staging / "shared"
         shared.mkdir()
@@ -567,7 +609,7 @@ def generate(config):
         switch_link(profiles_root / "current", destination)
         atomic_write(current, json.dumps({"fingerprint": fingerprint, "rules": digest, "accounts": records}, ensure_ascii=False, indent=2) + "\n")
         lines = ["# DMIT SSH 配置文件", "", "仅通过 SSH 下载配置；公网下载入口已关闭。", "",
-                 "Surge/Mihomo/Shadowrocket 导入本地配置文件。Shadowrocket 配置包含账号节点，可选用 node.txt 单独导入节点。", "",
+                 "Surge/Mihomo/Stash/Shadowrocket 导入本地配置文件。Shadowrocket 配置包含账号节点，可选用 node.txt 单独导入节点。", "",
                  "完整配置没有自动更新 URL。规则更新后需重新 SSH 导出完整配置。", ""]
         for record in records:
             lines.extend(["## " + record["label"], ""])
@@ -590,6 +632,7 @@ def export_profiles(config, stream, label=None):
             raise ValueError("Account label must match one active account")
     readme = ("Surge: import surge.conf as a local profile.\n"
               "Mihomo: import mihomo.yaml as a local profile.\n"
+              "Stash: import stash.yaml, not mihomo.yaml.\n"
               "Shadowrocket: import and activate shadowrocket.conf; it includes this account's node.\n"
               "node.txt optionally provides the standalone vmess node address.\n"
               "No managed-profile URL. Download a new archive over SSH after rule updates.\n"

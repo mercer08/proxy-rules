@@ -46,6 +46,7 @@ monaco.editor.defineTheme('private-light', { base: 'vs', inherit: true, rules: [
 const $ = (id) => document.getElementById(id);
 const state = { accounts: [], account: null, client: 'surge', file: 'surge.conf', baseline: '', etag: '', edited: false, loading: false, dirty: false, version: 0 };
 const clients = {
+  stash: { files: ['stash.yaml'], title: '导入 Stash', help: '手机 Stash 请导入 stash.yaml。内网规则直接内嵌，公开规则从 CDN 下载；APPLE 默认 DIRECT，可在策略组切换。' },
   lan: { files: ['lan-com.list'], title: '私有内网规则', help: '只填写 DOMAIN,域名 或 DOMAIN-SUFFIX,域名，每行一条，固定直连。保存后同步到你的三个设备配置；不进入 GitHub 或 CDN。WAN、券商及通用规则由 jsDelivr 提供。' },
   surge: { files: ['surge.conf'], title: '导入 Surge', help: '下载 surge.conf，在 Surge 中导入本地配置。公共规则仍由 jsDelivr 提供。' },
   mihomo: { files: ['mihomo.yaml'], title: '导入 Clash / Mihomo', help: '下载 mihomo.yaml，在支持 Mihomo 的客户端中导入本地配置。公共规则经 DIRECT 下载。' },
@@ -91,7 +92,7 @@ function updateStatus() {
 }
 function validate() {
   const model = editor.getModel();
-  if (state.file !== 'mihomo.yaml') {
+  if (!state.file.endsWith('.yaml')) {
     monaco.editor.setModelMarkers(model, 'yaml', []);
     $('validation-status').textContent = '语法高亮 · 客户端导入验证';
     return true;
@@ -127,7 +128,7 @@ async function selectAccount(account) {
   if (state.client === 'lan' && !account.businessRules) { state.client = 'surge'; state.file = 'surge.conf'; }
   updateClient(); $('breadcrumb-account').textContent = account.label; $('account-title').textContent = account.label;
   $('node-names').textContent = account.nodes.join(' · ');
-  $('account-subtitle').textContent = '完整配置尽在此处。选客户端，编辑后保存，或直接下载。';
+  $('account-subtitle').textContent = `选择客户端，编辑或下载。兜底 ${account.finalPolicy || (account.businessRules ? 'PROXY' : 'DIRECT')} · APPLE 默认 DIRECT`;
   $('rules-scope').lastChild.textContent = account.businessRules ? '公共规则 + 个人专项规则' : '公共分流规则';
   renderAccounts(); await loadFile();
 }
@@ -136,9 +137,9 @@ async function loadFile() {
   try {
     const result = await api(fileURL()); if (version !== state.version) return;
     state.baseline = result.content; state.etag = result.etag; state.edited = result.edited;
-    monaco.editor.setModelLanguage(editor.getModel(), state.file === 'mihomo.yaml' ? 'yaml' : state.file === 'shadowrocket.txt' ? 'plaintext' : 'proxy-conf');
+    monaco.editor.setModelLanguage(editor.getModel(), state.file.endsWith('.yaml') ? 'yaml' : state.file === 'shadowrocket.txt' ? 'plaintext' : 'proxy-conf');
     editor.setValue(result.content); editor.setPosition({ lineNumber: 1, column: 1 }); editor.revealLine(1);
-    $('language-label').textContent = state.client === 'lan' ? 'DOMAIN RULES' : state.file === 'mihomo.yaml' ? 'YAML' : state.file.endsWith('.conf') ? 'Proxy INI' : 'TEXT';
+    $('language-label').textContent = state.client === 'lan' ? 'DOMAIN RULES' : state.file.endsWith('.yaml') ? 'YAML' : state.file.endsWith('.conf') ? 'Proxy INI' : 'TEXT';
     validate();
   } catch (error) { state.account = null; editor.setValue(''); toast(error.message, true); }
   finally { setLoading(false); }

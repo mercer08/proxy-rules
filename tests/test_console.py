@@ -74,7 +74,7 @@ class ConsoleTests(unittest.TestCase):
         status, body, _ = self.request('/api/accounts/' + self.other + '/download')
         self.assertEqual(status, 200)
         with zipfile.ZipFile(io.BytesIO(body)) as archive:
-            self.assertEqual(len(archive.namelist()), 6)
+            self.assertEqual(len(archive.namelist()), 7)
             self.assertIn('friend', archive.read('surge.conf').decode())
             self.assertNotIn('owner', archive.read('surge.conf').decode())
         self.assertEqual(self.request('/api/accounts/' + 'c' * 24 + '/download')[0], 404)
