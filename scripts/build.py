@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Build three client rule sets from one immutable Loyalsoldier snapshot."""
+"""Build three client rule sets from immutable upstream snapshots."""
 import argparse
 import hashlib
 import ipaddress
 import json
 import os
 from pathlib import Path
+from urllib.parse import quote
 import re
 import sys
 import time
@@ -152,6 +153,7 @@ def effective_groups(sets, custom, ads, config=None):
         (sets["private"], "DIRECT"), (sets["lan"], "DIRECT"),
         *[(custom[name], policy) for name, policy in custom_order(config or {})],
         (sets["reject"] if ads else set(), "REJECT"),
+        (sets.get("ai", set()), "PROXY"),
         (sets.get("apple", set()), "DIRECT"),
         (sets["proxy"], "PROXY"), (sets["direct"], "DIRECT"),
         (sets["telegram"], "PROXY"), (sets["cn"], "DIRECT")]
@@ -217,13 +219,14 @@ def render(output, sets, custom, config):
     base = "https://raw.githubusercontent.com/" + config["publish_repository"] + "/release/"
     order = [("private", "DIRECT"), ("lan", "DIRECT"),
              *[(custom_output_name(name), policy) for name, policy in custom_order(config)],
-             ("reject", "REJECT"), *(([("apple", "APPLE")] if "apple" in sets else [])), ("proxy", "PROXY"), ("direct", "DIRECT"),
+             ("reject", "REJECT"), *(([("ai", "AI")] if "ai" in sets else [])),
+             *(([("apple", "APPLE")] if "apple" in sets else [])), ("proxy", "PROXY"), ("direct", "DIRECT"),
              ("telegram", "PROXY"), ("cn", "DIRECT")]
     for ads in (False, True):
         suffix = "-ads" if ads else ""
         active = [(name, policy) for name, policy in order if all_sets[name] and (ads or name != "reject")]
         for client in ("surge", "shadowrocket"):
-            lines = ["# Rule fragment only: define PROXY and APPLE policy/groups in your profile.", "[Rule]"]
+            lines = ["# Rule fragment only: define PROXY, AI and APPLE policy/groups in your profile.", "[Rule]"]
             for name, policy in active:
                 domainset = client == "surge" and name in sets and config["sets"][name]["kind"] == "domain"
                 rule_type = "DOMAIN-SET" if domainset else "RULE-SET"
@@ -231,7 +234,7 @@ def render(output, sets, custom, config):
                 lines.append("%s,%s%s/%s%s,%s" % (rule_type, base, client, name, ext, policy))
             lines.append("FINAL," + config["default_policy"])
             write(output / client / ("rules" + suffix + ".conf"), "\n".join(lines) + "\n")
-        lines = ["# Merge this fragment into a full profile with PROXY and APPLE groups.", "rule-providers:"]
+        lines = ["# Merge this fragment into a full profile with PROXY, AI and APPLE groups.", "rule-providers:"]
         for name, _ in active:
             behavior = config["sets"][name]["kind"] if name in sets else "classical"
             if behavior == "ip":
@@ -263,17 +266,35 @@ def build(root, output, input_dir=None, commit=None, previous=None):
     if not commit or not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("An immutable 40-character upstream commit is required")
     sets, raw_hashes = {}, {}
+    source_upstreams = {}
+    commits = {(upstream["repository"], upstream["branch"]): commit}
     excludes = json.loads((root / "custom/exclude.json").read_text())
     if set(excludes) - set(config["sets"]):
         raise ValueError("Unknown exclusion category")
     for name, source in config["sets"].items():
+        origin = source.get("upstream", upstream)
+        repository, branch = origin["repository"], origin["branch"]
+        if not re.fullmatch(r"[\w.-]+/[\w.-]+", repository) or not re.fullmatch(r"[\w.-]+", branch):
+            raise ValueError("Invalid source upstream")
+        key = (repository, branch)
+        if key not in commits:
+            if input_dir and not origin.get("commit"):
+                raise ValueError("Local inputs need an explicit commit for each additional upstream")
+            commits[key] = origin.get("commit") or json.loads(fetch(
+                "https://api.github.com/repos/%s/git/ref/heads/%s" % key,
+                os.environ.get("GITHUB_TOKEN")))["object"]["sha"]
+        source_commit = commits[key]
+        if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+            raise ValueError("Source commit must be immutable")
+        source_upstreams[name] = dict(repository=repository, branch=branch, commit=source_commit)
         rules = set()
         for filename in [source["file"], *source.get("additional_files", [])]:
-            if not re.fullmatch(r"[a-z]+\.txt", filename):
+            if (not re.fullmatch(r"[a-zA-Z0-9_!@./-]+\.(?:txt|yaml)", filename)
+                    or any(part in ("", ".", "..") for part in filename.split("/"))):
                 raise ValueError("Invalid source filename")
             raw = (input_dir / filename).read_bytes() if input_dir else fetch(
-                "https://raw.githubusercontent.com/%s/%s/%s" % (upstream["repository"], commit, filename))
-            raw_hashes[filename] = hashlib.sha256(raw).hexdigest()
+                "https://raw.githubusercontent.com/%s/%s/%s" % (repository, source_commit, quote(filename, safe="/")))
+            raw_hashes[filename if origin == upstream else repository + ":" + filename] = hashlib.sha256(raw).hexdigest()
             rules.update(parse_upstream(raw.decode("utf-8-sig"), source["kind"]))
         if len(rules) < source["minimum"]:
             raise ValueError("Source below minimum count: " + name)
@@ -315,6 +336,7 @@ def build(root, output, input_dir=None, commit=None, previous=None):
     # aggregate sets; broad parent rules remain behind APPLE in rule order.
     for name in ("direct", "proxy"):
         sets[name] -= sets.get("apple", set())
+        sets[name] -= sets.get("ai", set())
     counts = {name: len(rules) for name, rules in sets.items()}
     check_counts(counts, previous, config["count_change_limits"])
     cases = json.loads((root / "tests/cases.json").read_text())
@@ -328,6 +350,7 @@ def build(root, output, input_dir=None, commit=None, previous=None):
               for path in sorted(output.rglob("*")) if path.is_file() and path.name not in ("manifest.json", "checksums.sha256")}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
     manifest = {"schema_version": 1, "content_digest": digest, "upstream": dict(upstream, commit=commit),
+                "source_upstreams": source_upstreams,
                 "input_sha256": raw_hashes, "counts": counts, "custom_counts": {k: len(v) for k, v in custom.items()},
                 "ip_families": {k: sorted({ipaddress.ip_network(r[1]).version for r in v})
                                 for k, v in sets.items() if config["sets"][k]["kind"] == "ip"},

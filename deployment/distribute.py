@@ -420,7 +420,7 @@ def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=F
         MANAGED_URL="", PROXY_GROUP_OPTIONS=options, PROXIES="\n".join(shadowrocket_proxy(node) for node in (proxies or [])))
     text = re.sub(r"(?m)^update-url\s*=.*\n?", "", text)
     fragment = prepare_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", config, rules_dir, digest, business_rules)
-    text += "APPLE = select,DIRECT,PROXY, policy-select-name=DIRECT\n"
+    text += "AI = select,PROXY,DIRECT, policy-select-name=PROXY\nAPPLE = select,DIRECT,PROXY, policy-select-name=DIRECT\n"
     return text + final_rules(fragment, "shadowrocket", business_rules)
 
 
@@ -440,12 +440,13 @@ def render_stash(config, account, proxies, rules_dir, digest):
     if account.get("business_rules"):
         private = parse_private_lan(private_lan_path(config).read_text())
         rules = "".join("  - " + json.dumps(rule + ",DIRECT") + "\n" for rule in private)
-        marker = r'(?m)^(  - "RULE-SET,(?:wan-com|futu-broker|apple|proxy),|  - "MATCH,)'
+        marker = r'(?m)^(  - "RULE-SET,(?:wan-com|futu-broker|ai|apple|proxy),|  - "MATCH,)'
         fragment = re.sub(marker, lambda m: rules + m.group(), fragment, count=1)
         patterns += [("+." if rule.startswith("DOMAIN-SUFFIX,") else "") + rule.split(",")[1] for rule in private]
     base = {"mode": "rule", "log-level": "info", "ipv6": False,
             "proxies": proxies,
             "proxy-groups": [{"name": "PROXY", "type": "select", "proxies": [p["name"] for p in proxies]},
+                             {"name": "AI", "type": "select", "proxies": ["PROXY", "DIRECT"]},
                              {"name": "APPLE", "type": "select", "proxies": ["DIRECT", "PROXY"]}],
             "dns": {"nameserver": ["https://dns.alidns.com/dns-query"],
                     "nameserver-policy": {p: "system" for p in dict.fromkeys(patterns)},
@@ -489,11 +490,12 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
         common, MANAGED_URL="", PROXIES="\n".join(surge_lines))
     surge = re.sub(r"(?m)^#!MANAGED-CONFIG.*\n?", "", surge)
     business_rules = bool(account.get("business_rules", False))
-    surge += "APPLE = select, DIRECT, PROXY\n"
+    surge += "AI = select, PROXY, DIRECT\nAPPLE = select, DIRECT, PROXY\n"
     surge += prepare_rules((rules_dir / "surge/rules.conf").read_text(), "surge", config, rules_dir, digest, business_rules)
     mihomo_base = json.loads((templates / "mihomo.json").read_text())
     mihomo_base["proxies"] = proxies
     mihomo_base["proxy-groups"] = [{"name": "PROXY", "type": "select", "proxies": names},
+                                   {"name": "AI", "type": "select", "proxies": ["PROXY", "DIRECT"]},
                                    {"name": "APPLE", "type": "select", "proxies": ["DIRECT", "PROXY"]}]
     fragment = prepare_rules((rules_dir / "mihomo/rules.yaml").read_text(), "mihomo", config, rules_dir, digest, business_rules)
     # DNS classifications follow the same ordered domain rules, including custom
@@ -511,6 +513,8 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
             resolver = ["system"]
         elif policy == "APPLE":
             resolver = ["https://dns.alidns.com/dns-query#APPLE"]
+        elif policy == "AI":
+            resolver = ["https://1.1.1.1/dns-query#AI"]
         elif policy == "DIRECT":
             resolver = ["https://dns.alidns.com/dns-query"]
         elif policy == "PROXY":

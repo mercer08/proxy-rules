@@ -1,7 +1,9 @@
 # proxy-rules
 
-以 [Loyalsoldier/clash-rules](https://github.com/Loyalsoldier/clash-rules) 为唯一社区基底，
-叠加个人规则，每天生成 Surge、Mihomo 和 Shadowrocket 的规则文件。
+以 [Loyalsoldier/clash-rules](https://github.com/Loyalsoldier/clash-rules) 为社区基底，
+补充 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) 的独立 AI 类别，
+叠加公开业务规则，每天生成 Surge、Mihomo 和 Shadowrocket 的规则文件。
+每个来源在构建时固定提交，manifest 记录各类别来源提交和输入校验值。
 
 默认采用「国内直连，其余代理」。选取必要类别来简化维护，但 Loyalsoldier 的国内域名列表本身较大，
 本项目不按数量随意裁剪域名。社区广告规则会生成，默认配置不启用。
@@ -11,7 +13,8 @@
 ## 快速使用
 
 稳定文件位于 [`release` 分支](https://github.com/mercer08/proxy-rules/tree/release)。
-下列片段需要合并到现有完整配置中，并确保已有名为 `PROXY` 的代理策略或策略组。
+下列片段需要合并到现有完整配置中，并确保已有 `PROXY`、`AI`、`APPLE` 策略组。
+`AI` 默认选 PROXY，可选 DIRECT；`APPLE` 默认选 DIRECT，可选 PROXY。
 
 | 客户端 | 默认关闭社区广告拦截 | 开启社区广告拦截 |
 | --- | --- | --- |
@@ -20,7 +23,7 @@
 | Shadowrocket | [rules.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/shadowrocket/rules.conf) | [rules-ads.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/shadowrocket/rules-ads.conf) |
 
 上表是原始规则片段。完整个人配置由 [deployment](deployment/README.md) 私有生成并仅通过 SSH 导出：公共规则使用
-固定发布标签的 jsDelivr URL，Mihomo 经 DIRECT 下载；业务专项规则仅在允许的个人配置里嵌入。
+固定发布标签的 jsDelivr URL，Mihomo 经 DIRECT 下载；WAN 和券商规则仅在自用配置中引用 CDN，LAN 内部域名仅从私有配置台内嵌。
 GitHub Actions 发布后预热并校验 CDN 公共文件，DMIT 对首次采用的版本再次校验。
 jsDelivr 支持 GitHub 文件自动缓存，但其 Near China 网络不保证所有大陆线路可达。
 Surge 及 Shadowrocket 的下载方式应在完整配置中设置。不要把 GitHub 登录令牌放进分发给朋友的配置。
@@ -34,12 +37,13 @@ Surge 及 Shadowrocket 的下载方式应在完整配置中设置。不要把 Gi
 2. 自定义强制直连、强制代理、自定义拦截。
    然后匹配公开专项规则 `wan-com`（PROXY）、`futu-broker`（PROXY）。内网域名仅由 SSH 私有配置台注入。
 3. 社区广告拦截：仅在 `rules-ads` 片段启用。
-4. Apple 与 iCloud：独立 `apple` 规则集，走 `APPLE` 策略组（默认 DIRECT，可选 PROXY）。
-5. 上游明确代理域名：`PROXY`。
-6. 上游国内／直连域名：`DIRECT`。
-7. Telegram IP：`PROXY`。
-8. 国内 IP：`DIRECT`。
-9. 未匹配流量：公开片段默认为 `PROXY`；私有导出为本人 PROXY、其他账号 DIRECT。
+4. AI：独立 `ai` 规则集（上游 `category-ai-!cn`），走 `AI` 策略组，默认 PROXY、可选 DIRECT。
+5. Apple 与 iCloud：独立 `apple` 规则集，走 `APPLE` 策略组（默认 DIRECT，可选 PROXY）。
+6. 上游明确代理域名：`PROXY`。
+7. 上游国内／直连域名：`DIRECT`。
+8. Telegram IP：`PROXY`。
+9. 国内 IP：`DIRECT`。
+10. 未匹配流量：公开片段默认为 `PROXY`；私有导出为本人 PROXY、其他账号 DIRECT。
 
 IP 规则保留 `no-resolve`：避免仅为匹配 IP 规则而额外解析域名。客户端已知目标 IP 时仍能匹配。
 DNS 解析行为需要在完整客户端模板中配置。本仓库的匹配检查不会查询公共 DNS。

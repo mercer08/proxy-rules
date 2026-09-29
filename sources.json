@@ -50,6 +50,15 @@
       "kind": "ip",
       "minimum": 1
     },
+    "ai": {
+      "upstream": {
+        "repository": "MetaCubeX/meta-rules-dat",
+        "branch": "meta"
+      },
+      "file": "geo/geosite/category-ai-!cn.yaml",
+      "kind": "domain",
+      "minimum": 50
+    },
     "apple": {
       "file": "apple.txt",
       "additional_files": [

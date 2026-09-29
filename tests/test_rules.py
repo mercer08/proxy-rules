@@ -49,6 +49,8 @@ class RuleTests(unittest.TestCase):
         config = json.loads((ROOT / "sources.json").read_text())
         for value in config["sets"].values():
             value["minimum"] = 1
+            if "upstream" in value:
+                value["upstream"]["commit"] = "b" * 40
         (root / "sources.json").write_text(json.dumps(config))
         (root / "custom").mkdir()
         (root / "tests").mkdir()
@@ -63,10 +65,12 @@ class RuleTests(unittest.TestCase):
         inputs = {"private": ["+.local"], "direct": ["+.cn.example", "exact.example"],
                   "proxy": ["+.foreign.example"], "reject": ["+.ads.example"],
                   "lan": ["10.0.0.0/8", "fc00::/7"], "cn": ["1.0.1.0/24"],
-                  "telegram": ["149.154.160.0/20"], "apple": ["+.apple.example"]}
+                  "telegram": ["149.154.160.0/20"], "apple": ["+.apple.example"], "ai": ["+.ai.example"]}
         for name, payload in inputs.items():
             for filename in [config["sets"][name]["file"], *config["sets"][name].get("additional_files", [])]:
-                (root / "inputs" / filename).write_text(b.yaml_payload(payload))
+                path = root / "inputs" / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(b.yaml_payload(payload))
         cases = [{"domain": "router.local", "expected": "DIRECT"},
                  {"ip": "10.0.0.1", "expected": "DIRECT"},
                  {"domain": "foreign.example", "expected": "PROXY"},
@@ -221,6 +225,26 @@ class RuleTests(unittest.TestCase):
                 self.assertIn(',APPLE', text)
                 self.assertLess(text.index('/apple.'), text.index('/proxy.'))
                 self.assertIn('icloud.example', (root / 'out' / client / ('apple.yaml' if client == 'mihomo' else 'apple.list')).read_text())
+
+    def test_ai_is_pinned_separate_and_overrides_broad_direct_rules(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = self.fixture(root)
+            (root / 'inputs' / config['sets']['ai']['file']).write_text(b.yaml_payload(['+.ai.cn.example', 'api.exact-ai.example']))
+            (root / 'inputs/direct.txt').write_text(b.yaml_payload(['+.cn.example', '+.ai.cn.example']))
+            (root / 'tests/cases.json').write_text(json.dumps([
+                {'domain': 'chat.ai.cn.example', 'expected': 'PROXY'},
+                {'domain': 'api.exact-ai.example', 'expected': 'PROXY'},
+                {'domain': 'other.cn.example', 'expected': 'DIRECT'}]))
+            manifest = b.build(root, root / 'out', root / 'inputs', 'a' * 40)
+            self.assertEqual(manifest['source_upstreams']['ai']['repository'], 'MetaCubeX/meta-rules-dat')
+            self.assertEqual(manifest['source_upstreams']['ai']['commit'], 'b' * 40)
+            self.assertNotIn('ai.cn.example', (root / 'out/mihomo/direct.yaml').read_text())
+            for client, file in (('mihomo', 'rules.yaml'), ('surge', 'rules.conf'), ('shadowrocket', 'rules.conf')):
+                text = (root / 'out' / client / file).read_text()
+                self.assertIn(',AI', text)
+                self.assertLess(text.index('/ai.'), text.index('/direct.'))
+                self.assertLess(text.index('/ai.'), text.index('/proxy.'))
 
 if __name__ == "__main__":
     unittest.main()
