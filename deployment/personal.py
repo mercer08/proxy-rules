@@ -171,7 +171,7 @@ def render(profiles, config, account, private, yaml_block):
                        'COMPANY_LAN = select, DIRECT, REJECT, policy-select-name=DIRECT', 'HOME = select, DIRECT, REJECT, policy-select-name=DIRECT']
         lines = body.splitlines()
         lines = [l for l in lines if not (l.startswith('# Private rule set:') or any(l == r + ',DIRECT' for r in private))]
-        lines = [l.replace('/wan-com.list,PROXY', '/wan-com.list,COMPANY_WAN').replace('/futu-broker.list,PROXY', '/futu-broker.list,BROKER') for l in lines]
+        lines = [l.replace('/wan-com.list,PROXY', '/wan-com.list,COMPANY_WAN').replace('/futu-broker.list,PROXY', '/futu-broker.list,BROKER').replace('/telegram.list,PROXY', '/telegram.list,TELEGRAM') for l in lines]
         services = ['RULE-SET,' + origin + name + '.list,' + name.upper() + ',update-interval=86400' for name in ('microsoft', 'paypal', 'github', 'telegram', 'youtube', 'netflix', 'steam', 'google')]
         index = next((i for i, l in enumerate(lines) if '/proxy.' in l), len(lines) - 1)
         lines[index:index] = services
@@ -204,7 +204,7 @@ def render(profiles, config, account, private, yaml_block):
             dns = {'enable': True, 'ipv6': False, 'enhanced-mode': 'fake-ip', 'fake-ip-range': '198.18.0.1/16',
                    'fake-ip-filter': patterns + ['rule-set:private', 'rule-set:lan-com'], 'default-nameserver': ['223.5.5.5', '119.29.29.29'],
                    'proxy-server-nameserver': ['https://dns.alidns.com/dns-query'],
-                   'nameserver': ['https://1.1.1.1/dns-query#PROXY'], 'nameserver-policy': policies,
+                   'nameserver': ['https://1.1.1.1/dns-query#FINAL'], 'nameserver-policy': policies,
                    'direct-nameserver': ['https://dns.alidns.com/dns-query'], 'direct-nameserver-follow-policy': True}
         else:
             dns = {'nameserver': ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'],
@@ -218,7 +218,7 @@ def render(profiles, config, account, private, yaml_block):
         header, body = text.split('rules:\n', 1)
         lines = body.splitlines()
         lines = [l for l in lines if not any(l.strip() == '- ' + json.dumps(r + ',DIRECT') for r in private)]
-        lines = [l.replace('RULE-SET,lan-com,DIRECT', 'RULE-SET,lan-com,COMPANY_LAN').replace('RULE-SET,wan-com,PROXY', 'RULE-SET,wan-com,COMPANY_WAN').replace('RULE-SET,futu-broker,PROXY', 'RULE-SET,futu-broker,BROKER') for l in lines]
+        lines = [l.replace('RULE-SET,lan-com,DIRECT', 'RULE-SET,lan-com,COMPANY_LAN').replace('RULE-SET,wan-com,PROXY', 'RULE-SET,wan-com,COMPANY_WAN').replace('RULE-SET,futu-broker,PROXY', 'RULE-SET,futu-broker,BROKER').replace('RULE-SET,telegram,PROXY', 'RULE-SET,telegram,TELEGRAM') for l in lines]
         index = next((i for i, l in enumerate(lines) if 'RULE-SET,proxy,' in l), len(lines) - 1)
         lines[index:index] = ['  - ' + json.dumps('RULE-SET,svc-' + n + ',' + n.upper()) for n in ('microsoft', 'paypal', 'github', 'telegram', 'youtube', 'netflix', 'steam', 'google')]
         lines = ['  - ' + json.dumps(r) for r in prefix_rules(settings, private, client)] + lines
