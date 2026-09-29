@@ -403,14 +403,16 @@ rules:
                     if file == 'shadowrocket.conf':
                         self.assertIn('policy-select-name='+policy, final)
                     self.assertIn('APPLE = select', rendered[file])
-                    self.assertIn('AI = select', rendered[file])
+                    ai = next(line for line in rendered[file].splitlines() if line.startswith('AI = select'))
+                    self.assertNotIn('DIRECT', ai)
+                    self.assertEqual(ai.split(',')[1].strip(), 'PROXY')
                     self.assertIn('/ai.list,AI', rendered[file])
                 for file in ('mihomo.yaml', 'stash.yaml'):
                     profile = yaml.safe_load(rendered[file])
                     self.assertEqual(profile['rules'][-1], 'MATCH,FINAL')
                     self.assertEqual(next(g for g in profile['proxy-groups'] if g['name']=='FINAL'), {'name':'FINAL','type':'select','proxies':[policy,'DIRECT' if owner else 'PROXY']})
                     self.assertEqual(next(g for g in profile['proxy-groups'] if g['name']=='APPLE'), {'name':'APPLE','type':'select','proxies':['DIRECT','PROXY']})
-                    self.assertEqual(next(g for g in profile['proxy-groups'] if g['name']=='AI'), {'name':'AI','type':'select','proxies':['PROXY','DIRECT']})
+                    self.assertEqual(next(g for g in profile['proxy-groups'] if g['name']=='AI'), {'name':'AI','type':'select','proxies':['PROXY']})
                     self.assertLess(profile['rules'].index('RULE-SET,ai,AI'), profile['rules'].index('RULE-SET,proxy,PROXY'))
                     self.assertLess(profile['rules'].index('RULE-SET,apple,APPLE'), profile['rules'].index('RULE-SET,proxy,PROXY'))
                 stash = yaml.safe_load(rendered['stash.yaml'])

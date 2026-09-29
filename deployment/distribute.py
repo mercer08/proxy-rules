@@ -430,7 +430,7 @@ def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=F
         MANAGED_URL="", PROXY_GROUP_OPTIONS=options, PROXIES="\n".join(shadowrocket_proxy(node) for node in (proxies or [])))
     text = re.sub(r"(?m)^update-url\s*=.*\n?", "", text)
     fragment = prepare_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", config, rules_dir, digest, business_rules)
-    text += "AI = select,PROXY,DIRECT, policy-select-name=PROXY\nAPPLE = select,DIRECT,PROXY, policy-select-name=DIRECT\n"
+    text += "AI = select,PROXY, policy-select-name=PROXY\nAPPLE = select,DIRECT,PROXY, policy-select-name=DIRECT\n"
     choices = final_choices({"business_rules": business_rules, "final_policy": final_policy or ("PROXY" if business_rules else "DIRECT")})
     text += "FINAL = select," + ",".join(choices) + ", policy-select-name=" + choices[0] + "\n"
     return text + final_rules(fragment, "shadowrocket")
@@ -463,7 +463,7 @@ def render_stash(config, account, proxies, rules_dir, digest):
     base = {"mode": "rule", "log-level": "info", "ipv6": False,
             "proxies": proxies,
             "proxy-groups": [{"name": "PROXY", "type": "select", "proxies": [p["name"] for p in proxies]},
-                             {"name": "AI", "type": "select", "proxies": ["PROXY", "DIRECT"]},
+                             {"name": "AI", "type": "select", "proxies": ["PROXY"]},
                              {"name": "APPLE", "type": "select", "proxies": ["DIRECT", "PROXY"]},
                              {"name": "FINAL", "type": "select", "proxies": final_choices(account)}],
             "dns": {"nameserver": ["https://dns.alidns.com/dns-query"],
@@ -508,14 +508,14 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
         common, MANAGED_URL="", PROXIES="\n".join(surge_lines))
     surge = re.sub(r"(?m)^#!MANAGED-CONFIG.*\n?", "", surge)
     business_rules = bool(account.get("business_rules", False))
-    surge += "AI = select, PROXY, DIRECT\nAPPLE = select, DIRECT, PROXY\n"
+    surge += "AI = select, PROXY\nAPPLE = select, DIRECT, PROXY\n"
     choices = final_choices(account)
     surge += "FINAL = select, " + ", ".join(choices) + "\n"
     surge += prepare_rules((rules_dir / "surge/rules.conf").read_text(), "surge", config, rules_dir, digest, business_rules)
     mihomo_base = json.loads((templates / "mihomo.json").read_text())
     mihomo_base["proxies"] = proxies
     mihomo_base["proxy-groups"] = [{"name": "PROXY", "type": "select", "proxies": names},
-                                   {"name": "AI", "type": "select", "proxies": ["PROXY", "DIRECT"]},
+                                   {"name": "AI", "type": "select", "proxies": ["PROXY"]},
                                    {"name": "APPLE", "type": "select", "proxies": ["DIRECT", "PROXY"]},
                                    {"name": "FINAL", "type": "select", "proxies": choices}]
     fragment = prepare_rules((rules_dir / "mihomo/rules.yaml").read_text(), "mihomo", config, rules_dir, digest, business_rules)
