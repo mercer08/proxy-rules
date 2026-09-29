@@ -128,7 +128,7 @@ async function selectAccount(account) {
   if (state.client === 'lan' && !account.businessRules) { state.client = 'surge'; state.file = 'surge.conf'; }
   updateClient(); $('breadcrumb-account').textContent = account.label; $('account-title').textContent = account.label;
   $('node-names').textContent = account.nodes.join(' · ');
-  $('account-subtitle').textContent = `选择客户端，编辑或下载。兜底 ${account.finalPolicy || (account.businessRules ? 'PROXY' : 'DIRECT')} · AI 默认 PROXY · APPLE 默认 DIRECT`;
+  $('account-subtitle').textContent = `选择客户端，编辑或下载。FINAL 默认 ${account.finalPolicy || (account.businessRules ? 'PROXY' : 'DIRECT')} · AI 默认 PROXY · APPLE 默认 DIRECT`;
   $('rules-scope').lastChild.textContent = account.businessRules ? '公共规则 + 个人专项规则' : '公共分流规则';
   renderAccounts(); await loadFile();
 }

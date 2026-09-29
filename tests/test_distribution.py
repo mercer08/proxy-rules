@@ -288,7 +288,8 @@ rules:
             dns = mihomo["dns"]
             self.assertEqual(list(dns["nameserver-policy"]), ["rule-set:proxy", "rule-set:direct"])
             self.assertTrue(dns["nameserver-policy"]["rule-set:proxy"][0].endswith("#PROXY"))
-            self.assertEqual(mihomo["rules"], ["RULE-SET,proxy,PROXY", "RULE-SET,direct,DIRECT", "MATCH,DIRECT"])
+            self.assertEqual(mihomo["rules"], ["RULE-SET,proxy,PROXY", "RULE-SET,direct,DIRECT", "MATCH,FINAL"])
+            self.assertEqual(next(g for g in mihomo['proxy-groups'] if g['name']=='FINAL')['proxies'], ['DIRECT','PROXY'])
             self.assertEqual(mihomo["proxies"], [node])
             self.assertIn("block-quic = always-allow", rendered["surge.conf"])
             self.assertNotIn("block-quic=on", rendered["surge.conf"])
@@ -396,13 +397,18 @@ rules:
                 rendered = d.render_profiles(config, {'business_rules': owner}, converted, '', root, 'b' * 64)
                 policy = 'PROXY' if owner else 'DIRECT'
                 for file in ('surge.conf', 'shadowrocket.conf'):
-                    self.assertTrue(rendered[file].endswith('FINAL,' + policy + '\n'))
+                    self.assertTrue(rendered[file].endswith('FINAL,FINAL\n'))
+                    final = next(line for line in rendered[file].splitlines() if line.startswith('FINAL = select'))
+                    self.assertEqual(final.split(',')[1].strip(), policy)
+                    if file == 'shadowrocket.conf':
+                        self.assertIn('policy-select-name='+policy, final)
                     self.assertIn('APPLE = select', rendered[file])
                     self.assertIn('AI = select', rendered[file])
                     self.assertIn('/ai.list,AI', rendered[file])
                 for file in ('mihomo.yaml', 'stash.yaml'):
                     profile = yaml.safe_load(rendered[file])
-                    self.assertEqual(profile['rules'][-1], 'MATCH,' + policy)
+                    self.assertEqual(profile['rules'][-1], 'MATCH,FINAL')
+                    self.assertEqual(next(g for g in profile['proxy-groups'] if g['name']=='FINAL'), {'name':'FINAL','type':'select','proxies':[policy,'DIRECT' if owner else 'PROXY']})
                     self.assertEqual(next(g for g in profile['proxy-groups'] if g['name']=='APPLE'), {'name':'APPLE','type':'select','proxies':['DIRECT','PROXY']})
                     self.assertEqual(next(g for g in profile['proxy-groups'] if g['name']=='AI'), {'name':'AI','type':'select','proxies':['PROXY','DIRECT']})
                     self.assertLess(profile['rules'].index('RULE-SET,ai,AI'), profile['rules'].index('RULE-SET,proxy,PROXY'))
@@ -419,6 +425,15 @@ rules:
                 if owner:
                     self.assertEqual(stash['dns']['nameserver-policy']['+.corp.internal.test'], 'system')
                     self.assertLess(stash['rules'].index('DOMAIN,host.internal.test,DIRECT'), stash['rules'].index('RULE-SET,ai,AI'))
+            # FINAL selection and permission to receive business rules are independent.
+            overridden = d.render_profiles(config, {'business_rules': False, 'final_policy': 'PROXY'}, converted, '', root, 'b' * 64)
+            for file in ('mihomo.yaml', 'stash.yaml'):
+                profile = yaml.safe_load(overridden[file])
+                self.assertEqual(next(g for g in profile['proxy-groups'] if g['name']=='FINAL')['proxies'], ['PROXY','DIRECT'])
+                self.assertNotIn('internal.test', overridden[file])
+            for file in ('surge.conf', 'shadowrocket.conf'):
+                group = next(line for line in overridden[file].splitlines() if line.startswith('FINAL = select'))
+                self.assertEqual(group.split(',')[1].strip(), 'PROXY')
 
 
 if __name__ == "__main__":
