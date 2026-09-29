@@ -6,6 +6,13 @@ distributed by that project under GPL-3.0. This repository preserves the
 upstream license and records the exact upstream commit and input hashes
 in each published manifest.
 
+The separate AI category is selected from
+[MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat),
+also licensed under GPL-3.0. Its immutable source commit and input hash
+are recorded separately in the manifest. That project's README credits
+its contributing rule sources; these generated adaptations do not imply
+upstream endorsement.
+
 Loyalsoldier credits its own upstream data sources, including
 Loyalsoldier/v2ray-rules-dat, v2fly/domain-list-community,
 felixonmars/dnsmasq-china-list and 17mon/china_ip_list. See its README

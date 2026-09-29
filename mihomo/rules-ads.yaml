@@ -1,4 +1,4 @@
-# Merge this fragment into a full profile with PROXY and APPLE groups.
+# Merge this fragment into a full profile with PROXY, AI and APPLE groups.
 rule-providers:
   private:
     type: http
@@ -38,6 +38,14 @@ rule-providers:
     format: yaml
     url: "https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/reject.yaml"
     path: ./ruleset/reject.yaml
+    interval: 86400
+    proxy: PROXY
+  ai:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/ai.yaml"
+    path: ./ruleset/ai.yaml
     interval: 86400
     proxy: PROXY
   apple:
@@ -86,6 +94,7 @@ rules:
   - "RULE-SET,wan-com,PROXY"
   - "RULE-SET,futu-broker,PROXY"
   - "RULE-SET,reject,REJECT"
+  - "RULE-SET,ai,AI"
   - "RULE-SET,apple,APPLE"
   - "RULE-SET,proxy,PROXY"
   - "RULE-SET,direct,DIRECT"
