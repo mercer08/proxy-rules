@@ -137,9 +137,11 @@ function renderAccounts() {
 }
 async function selectAccount(account) {
   if (state.loading || !confirmDiscard()) return;
-  state.account = account; $('lan-tab').hidden = !account.businessRules || account.personal;
+  state.account = account;
   $('personal-tab').hidden = !account.personal; $('version-bar').hidden = !account.personal;
-  if ((state.client === 'lan' && (!account.businessRules || account.personal)) || (state.client === 'personal' && !account.personal)) { state.client = 'surge'; state.file = 'surge.conf'; }
+  for (const tab of document.querySelectorAll('.client-tab')) tab.hidden = !clientAvailable(tab.dataset.client, account);
+  if (!clientAvailable(state.client, account)) state.client = ['surge', 'mihomo', 'stash', 'shadowrocket', 'personal', 'lan'].find(client => clientAvailable(client, account));
+  if (!availableFiles(state.client, account).includes(state.file)) state.file = availableFiles(state.client, account)[0];
   updateClient(); $('breadcrumb-account').textContent = account.label; $('account-title').textContent = account.label;
   $('node-names').textContent = account.nodes.join(' · ');
   $('account-subtitle').textContent = accountSubtitle(account);
@@ -158,9 +160,17 @@ async function loadFile() {
   } catch (error) { state.account = null; editor.setValue(''); toast(error.message, true); }
   finally { setLoading(false); }
 }
+function availableFiles(client, account) {
+  return clients[client].files.filter(name => client === 'lan' || client === 'personal' || account.files.includes(name));
+}
+function clientAvailable(client, account) {
+  if (client === 'lan') return account.businessRules && !account.personal;
+  if (client === 'personal') return account.personal;
+  return availableFiles(client, account).length > 0;
+}
 function updateClient() {
   for (const tab of document.querySelectorAll('.client-tab')) { const active = tab.dataset.client === state.client; tab.classList.toggle('active', active); tab.setAttribute('aria-selected', String(active)); }
-  $('file-select').replaceChildren(...clients[state.client].files.map(name => { const option = document.createElement('option'); option.value = option.textContent = name; return option; }));
+  $('file-select').replaceChildren(...availableFiles(state.client, state.account).map(name => { const option = document.createElement('option'); option.value = option.textContent = name; return option; }));
   $('file-select').value = state.file; $('import-title').textContent = clients[state.client].title; $('import-help').textContent = clients[state.client].help;
 }
 async function save() {
