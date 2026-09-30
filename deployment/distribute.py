@@ -528,6 +528,61 @@ def final_last_profiles(profiles):
     return {name: final_last_profile(text, name) for name, text in profiles.items()}
 
 
+def ai_proxy_only_profile(text, filename):
+    """Keep AI on PROXY, even when a manual profile override adds DIRECT."""
+    if filename in ('surge.conf', 'shadowrocket.conf'):
+        def section(match):
+            def group(entry):
+                parts = [part.strip() for part in entry.group(2).split(',')]
+                if parts[0].lower() != 'select':
+                    raise ValueError('Unsupported AI group type in ' + filename)
+                options = [part for part in parts[1:] if '=' in part]
+                options = ['policy-select-name=PROXY' if part.split('=', 1)[0].strip() == 'policy-select-name'
+                           else part for part in options]
+                return entry.group(1) + ', '.join(['select', 'PROXY'] + options)
+            body, count = re.subn(r'(?m)^(\s*AI\s*=\s*)([^\r\n]+)', group, match.group(2))
+            if count > 1:
+                raise ValueError('Multiple AI groups in ' + filename)
+            return match.group(1) + body
+        return re.sub(r'(?ms)(^\[Proxy Group\]\r?\n)(.*?)(?=^\[|\Z)', section, text)
+    if filename in ('mihomo.yaml', 'stash.yaml'):
+        def section(match):
+            lines = match.group(2).splitlines(keepends=True)
+            candidates = [(i, len(m.group(1))) for i, line in enumerate(lines)
+                          if (m := re.match(r'^( *)-(?:\s|$)', line))]
+            if not candidates:
+                return match.group(0)
+            indent = min(level for _, level in candidates)
+            starts = [i for i, level in candidates if level == indent]
+            blocks = [''.join(lines[start:end]) for start, end in zip(starts, starts[1:] + [len(lines)])]
+            count = 0
+            for i, block in enumerate(blocks):
+                name = re.search(r'''(?m)^\s*(?:-\s*)?["']?name["']?\s*:\s*(["']?)([^\n#]+?)\1\s*$''', block)
+                if not name:
+                    raise ValueError('Unsupported group syntax in ' + filename)
+                if name.group(2).strip() != 'AI':
+                    continue
+                count += 1
+                # Replace only the proxies field; keep icons and other group metadata.
+                pattern = r'(?m)^( +)["\']?proxies["\']?\s*:[^\n]*\n(?:\1 +[^\n]*\n|\1-[^\n]*\n)*'
+                blocks[i], fields = re.subn(pattern, lambda field: field.group(1) + 'proxies: ["PROXY"]\n', block)
+                if fields != 1:
+                    raise ValueError('Unsupported AI proxies syntax in ' + filename)
+            if count > 1:
+                raise ValueError('Multiple AI groups in ' + filename)
+            return match.group(1) + ''.join(lines[:starts[0]]) + ''.join(blocks)
+        return re.sub(r'(?ms)(^proxy-groups:[^\n]*\n)(.*?)(?=^[^\s#-][^\n]*:|\Z)', section, text)
+    return text
+
+
+def normalize_profile(text, filename):
+    return final_last_profile(ai_proxy_only_profile(text, filename), filename)
+
+
+def normalize_profiles(profiles):
+    return {name: normalize_profile(text, name) for name, text in profiles.items()}
+
+
 def yaml_block(value, indent=0):
     """Emit the JSON-compatible profile data as readable block YAML."""
     pad = " " * indent
@@ -624,7 +679,7 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
             "node.txt": "\n".join(uris) + "\n",
             "shadowrocket.conf": shadowrocket}
     private = parse_private_lan(private_lan_path(config).read_text()) if account.get('personal') and business_rules else []
-    return final_last_profiles(personal.render_global_services(personal.render(profiles, config, account, private, yaml_block), config, yaml_block))
+    return normalize_profiles(personal.render_global_services(personal.render(profiles, config, account, private, yaml_block), config, yaml_block))
 
 
 def generate(config):
@@ -671,7 +726,7 @@ def generate(config):
                 if folder + "/" + name in overrides:
                     profiles[name] = overrides[folder + "/" + name]
                     edited.append(name)
-            profiles = final_last_profiles(profiles)
+            profiles = normalize_profiles(profiles)
             directory = staging / folder
             directory.mkdir()
             for name, content in profiles.items():
@@ -688,7 +743,7 @@ def generate(config):
         shadowrocket = render_shadowrocket(config, rules_dir, digest,
                                            config["public_url"].rstrip("/") + "/proxy-config/shadowrocket.conf")
         shadowrocket = personal.render_global_services({'shadowrocket.conf': shadowrocket}, config, yaml_block)['shadowrocket.conf']
-        shadowrocket = final_last_profile(shadowrocket, "shadowrocket.conf")
+        shadowrocket = normalize_profile(shadowrocket, "shadowrocket.conf")
         (shared / "shadowrocket.conf").write_text(shadowrocket)
         os.chmod(staging, 0o700)
         for path in staging.rglob("*"):
