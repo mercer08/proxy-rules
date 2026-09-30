@@ -583,6 +583,20 @@ def normalize_profiles(profiles):
     return {name: normalize_profile(text, name) for name, text in profiles.items()}
 
 
+def account_profile_outputs(profiles, config, folder):
+    """Restrict an opted-in account's generated files, including manual overrides."""
+    allowed = config.get('account_profile_files', {}).get(folder)
+    if allowed is None:
+        return profiles
+    if (not isinstance(allowed, list) or not allowed or
+            any(not isinstance(name, str) or name not in PROFILE_FILES or name not in profiles for name in allowed) or
+            len(set(allowed)) != len(allowed)):
+        raise ValueError('Invalid account profile file selection')
+    return {name: profiles[name] for name in allowed}
+
+
+
+
 def yaml_block(value, indent=0):
     """Emit the JSON-compatible profile data as readable block YAML."""
     pad = " " * indent
@@ -727,6 +741,10 @@ def generate(config):
                     profiles[name] = overrides[folder + "/" + name]
                     edited.append(name)
             profiles = normalize_profiles(profiles)
+            profiles = account_profile_outputs(profiles, config, folder)
+            edited = [name for name in edited if name in profiles]
+            if account.get('personal') and set(profiles) != set(PROFILE_FILES):
+                raise ValueError('Personal versioned accounts require all profile files')
             directory = staging / folder
             directory.mkdir()
             for name, content in profiles.items():
@@ -754,8 +772,8 @@ def generate(config):
         old_records = json.loads(current.read_text()).get('accounts', []) if current.exists() else []
         for record in records:
             if record.get('personal_path'):
-                identifier = Path(record['files']['surge.conf']).parent.name
-                old = next((r for r in old_records if r['files']['surge.conf'] == record['files']['surge.conf']), None)
+                identifier = Path(next(iter(record['files'].values()))).parent.name
+                old = next((r for r in old_records if Path(next(iter(r['files'].values()))).parent.name == identifier), None)
                 if old and any(Path(old['files'][n]).read_bytes() != (destination / identifier / n).read_bytes() for n in PROFILE_FILES):
                     versions.backup(config, old, identifier, atomic_write)
         switch_link(profiles_root / "current", destination)

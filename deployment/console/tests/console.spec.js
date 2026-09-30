@@ -123,7 +123,7 @@ test('iPhone preferences merge into four apps, back up, download and roll back w
   const inventory = (await (await page.request.get('/api/accounts')).json()).accounts;
   const phone = inventory.find(a => a.label === '我的 iPhone');
   const peers = inventory.filter(a => a.id !== phone.id);
-  const peerContents = await Promise.all(peers.map(async a => (await (await page.request.get(`/api/accounts/${a.id}/files/stash.yaml`)).json()).content));
+  const peerContents = await Promise.all(peers.map(async a => (await (await page.request.get(`/api/accounts/${a.id}/files/${a.files[0]}`)).json()).content));
   await page.locator('#accounts button').filter({ hasText: '我的 iPhone' }).click();
   await expect(page.locator('#version-bar')).toBeVisible();
   await expect(page.getByRole('tab', { name: '内网规则', exact: true })).toBeHidden();
@@ -158,9 +158,33 @@ test('iPhone preferences merge into four apps, back up, download and roll back w
   const restored = parse((await (await page.request.get(`/api/accounts/${phone.id}/files/stash.yaml`)).json()).content);
   expect(restored['proxy-groups'].find(g => g.name === 'MICROSOFT').proxies[0]).toBe('DIRECT');
   for (let i = 0; i < peers.length; i++) {
-    expect((await (await page.request.get(`/api/accounts/${peers[i].id}/files/stash.yaml`)).json()).content).toBe(peerContents[i]);
+    expect((await (await page.request.get(`/api/accounts/${peers[i].id}/files/${peers[i].files[0]}`)).json()).content).toBe(peerContents[i]);
   }
   await page.locator('#accounts button').filter({ hasText: '演示账号' }).click();
   await expect(page.locator('#version-bar')).toBeHidden();
   await expect(page.getByRole('tab', { name: '个人策略', exact: true })).toBeHidden();
+});
+
+test('router exposes only Mihomo and private LAN, switches safely between devices and refreshes', async ({ page }) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Shadowrocket', exact: true }).click();
+  await page.locator('#accounts button').filter({ hasText: '我的路由器' }).click();
+  await expect(page.getByRole('tab', { name: 'Surge', exact: true })).toBeHidden();
+  await expect(page.getByRole('tab', { name: 'Stash', exact: true })).toBeHidden();
+  await expect(page.getByRole('tab', { name: 'Shadowrocket', exact: true })).toBeHidden();
+  await expect(page.getByRole('tab', { name: 'Clash / Mihomo', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '内网规则', exact: true })).toBeVisible();
+  await expect(page.locator('#file-select')).toHaveValue('mihomo.yaml');
+  await expect(page.locator('#validation-status')).toHaveText('YAML 语法通过');
+  await page.locator('#refresh').click();
+  await expect(page.locator('#file-select')).toHaveValue('mihomo.yaml');
+  const accounts = (await (await page.request.get('/api/accounts')).json()).accounts;
+  const router = accounts.find(a => a.label === '我的路由器');
+  expect(router.files).toEqual(['mihomo.yaml']);
+  expect((await page.request.get(`/api/accounts/${router.id}/files/surge.conf`)).status()).toBe(404);
+  await page.locator('#accounts button').filter({ hasText: '我的电脑' }).click();
+  await expect(page.getByRole('tab', { name: 'Surge', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Stash', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
 });

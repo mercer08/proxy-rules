@@ -41,7 +41,7 @@ class Console:
         return json.loads((self.state / 'profiles.json').read_text())['accounts']
 
     def identity(self, record):
-        return Path(record['files']['surge.conf']).parent.name
+        return Path(next(iter(record['files'].values()))).parent.name
 
     def account(self, identifier):
         if not re.fullmatch(r'[a-f0-9]{24}', identifier):

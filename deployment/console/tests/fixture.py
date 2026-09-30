@@ -1,5 +1,6 @@
 """Synthetic offline fixtures only; never use production credentials in UI tests."""
 import json
+import hashlib
 from pathlib import Path
 import sys
 import tempfile
@@ -38,10 +39,11 @@ service_target = state / 'service-rules' / manifest['content_digest']; service_t
 service_output.rename(service_target)
 c.d.atomic_write(state / 'personal-services.json', json.dumps({'tag': 'services-fixture-' + manifest['content_digest'][:10], 'digest': manifest['content_digest']}))
 def load_accounts(config):
-    return {**accounts, 'phone': {'label': '我的 iPhone', 'nodes': [{'name': 'dmit-lax'}], 'business_rules': True,
+    return {**accounts, 'router': {'label': '我的路由器', 'nodes': [{'name': 'dmit-lax'}], 'business_rules': True}, 'phone': {'label': '我的 iPhone', 'nodes': [{'name': 'dmit-lax'}], 'business_rules': True,
             'personal': json.loads(personal_path.read_text()), 'personal_path': str(personal_path),
             'final_policy': c.d.personal.choices(json.loads(personal_path.read_text()), 'FINAL')[0]}}
 c.d.load_accounts = load_accounts
+config['account_profile_files'] = {hashlib.sha256(b'router').hexdigest()[:24]: ['mihomo.yaml']}
 c.d.verify_cdn = lambda *args: 0
 def converted(config, key, nodes):
     name = nodes[0]['name']
