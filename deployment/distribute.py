@@ -474,6 +474,60 @@ def render_stash(config, account, proxies, rules_dir, digest):
     return "\n".join(yaml_block(base)) + "\n" + final_rules(rewrite_rules(fragment, config, digest), "stash")
 
 
+def final_last_profile(text, filename):
+    """Keep FINAL last without rewriting policy options or unrelated sections."""
+    def reorder(items, is_final):
+        selected = [item for item in items if is_final(item)]
+        if len(selected) > 1:
+            raise ValueError('Multiple FINAL entries in ' + filename)
+        return [item for item in items if not is_final(item)] + selected
+
+    if filename in ('surge.conf', 'shadowrocket.conf'):
+        for section, pattern in (('Proxy Group', r'^\s*FINAL\s*='), ('Rule', r'^\s*FINAL\s*,')):
+            def move(match):
+                lines = match.group(2).splitlines(keepends=True)
+                active = [i for i, line in enumerate(lines) if line.strip() and not line.lstrip().startswith(('#', '//', ';'))]
+                selected = [i for i in active if re.match(pattern, lines[i], re.I)]
+                if len(selected) > 1:
+                    raise ValueError('Multiple FINAL entries in ' + filename)
+                if selected and selected[0] != active[-1]:
+                    entry = lines.pop(selected[0])
+                    active = [i for i, line in enumerate(lines) if line.strip() and not line.lstrip().startswith(('#', '//', ';'))]
+                    if not entry.endswith('\n'):
+                        entry += '\n'
+                    lines.insert(active[-1] + 1 if active else 0, entry)
+                return match.group(1) + ''.join(lines)
+            text = re.sub(r'(?ms)(^\[' + section + r'\]\r?\n)(.*?)(?=^\[|\Z)', move, text)
+    elif filename in ('mihomo.yaml', 'stash.yaml'):
+        for key in ('proxy-groups', 'rules'):
+            def move(match):
+                body = match.group(2)
+                lines = body.splitlines(keepends=True)
+                candidates = [(i, len(m.group(1))) for i, line in enumerate(lines)
+                              if (m := re.match(r'^( *)(?:-)(?:\s|$)', line))]
+                if not candidates:
+                    return match.group(0)
+                indent = min(level for _, level in candidates)
+                starts = [i for i, level in candidates if level == indent]
+                blocks = [''.join(lines[start:end]) for start, end in zip(starts, starts[1:] + [len(lines)])]
+                def is_final(block):
+                    if key == 'proxy-groups':
+                        name = re.search(r'''(?m)^\s*(?:-\s*)?["']?name["']?\s*:\s*(["']?)([^\n#]+?)\1\s*$''', block)
+                        if not name:
+                            raise ValueError('Unsupported group syntax in ' + filename)
+                        return name.group(2).strip().upper() == 'FINAL'
+                    value = block.splitlines()[0].strip()[1:].strip().lstrip('\"\'')
+                    return bool(re.match(r'(?:MATCH|FINAL)\s*,', value, re.I))
+                ordered = reorder(blocks, is_final)
+                return match.group(1) + ''.join(lines[:starts[0]]) + ''.join(ordered)
+            text = re.sub(r'(?ms)(^' + key + r':[^\n]*\n)(.*?)(?=^[^\s#-][^\n]*:|\Z)', move, text)
+    return text
+
+
+def final_last_profiles(profiles):
+    return {name: final_last_profile(text, name) for name, text in profiles.items()}
+
+
 def yaml_block(value, indent=0):
     """Emit the JSON-compatible profile data as readable block YAML."""
     pad = " " * indent
@@ -570,7 +624,7 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
             "node.txt": "\n".join(uris) + "\n",
             "shadowrocket.conf": shadowrocket}
     private = parse_private_lan(private_lan_path(config).read_text()) if account.get('personal') and business_rules else []
-    return personal.render_global_services(personal.render(profiles, config, account, private, yaml_block), config, yaml_block)
+    return final_last_profiles(personal.render_global_services(personal.render(profiles, config, account, private, yaml_block), config, yaml_block))
 
 
 def generate(config):
@@ -617,6 +671,7 @@ def generate(config):
                 if folder + "/" + name in overrides:
                     profiles[name] = overrides[folder + "/" + name]
                     edited.append(name)
+            profiles = final_last_profiles(profiles)
             directory = staging / folder
             directory.mkdir()
             for name, content in profiles.items():
@@ -633,6 +688,7 @@ def generate(config):
         shadowrocket = render_shadowrocket(config, rules_dir, digest,
                                            config["public_url"].rstrip("/") + "/proxy-config/shadowrocket.conf")
         shadowrocket = personal.render_global_services({'shadowrocket.conf': shadowrocket}, config, yaml_block)['shadowrocket.conf']
+        shadowrocket = final_last_profile(shadowrocket, "shadowrocket.conf")
         (shared / "shadowrocket.conf").write_text(shadowrocket)
         os.chmod(staging, 0o700)
         for path in staging.rglob("*"):
