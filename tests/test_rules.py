@@ -93,10 +93,11 @@ class RuleTests(unittest.TestCase):
             mi = (root / "out/mihomo/direct.yaml").read_text()
             self.assertIn('"exact.example"', mi)
             self.assertIn('"+.cn.example"', mi)
-            for client, filename in (("surge", "rules.conf"), ("shadowrocket", "rules.conf"), ("mihomo", "rules.yaml")):
+            for client, filename in (("surge", "rules.conf"), ("shadowrocket", "rules.conf"), ("mihomo", "rules.yaml"), ("loon", "rules.conf")):
                 text = (root / "out" / client / filename).read_text()
                 self.assertNotIn("/reject.", text)
                 self.assertLess(text.index("custom-proxy"), text.index("/direct."))
+            self.assertEqual((root / "out/loon/direct.list").read_text(), sr)
             for line in (root / "out/checksums.sha256").read_text().splitlines():
                 digest, name = line.split("  ", 1)
                 self.assertEqual(digest, hashlib.sha256((root / "out" / name).read_bytes()).hexdigest())
@@ -245,6 +246,28 @@ class RuleTests(unittest.TestCase):
                 self.assertIn(',AI', text)
                 self.assertLess(text.index('/ai.'), text.index('/direct.'))
                 self.assertLess(text.index('/ai.'), text.index('/proxy.'))
+
+    def test_loon_fragment_uses_remote_rules_in_public_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            b.build(root, root / 'out', root / 'inputs', 'a' * 40)
+            base = 'https://raw.githubusercontent.com/mercer08/proxy-rules/release/loon/'
+            for name, ads in (('rules.conf', False), ('rules-ads.conf', True)):
+                text = (root / 'out/loon' / name).read_text()
+                rules, remote = text.split('[Remote Rule]\n')
+                self.assertEqual([l for l in rules.splitlines() if l and not l.startswith(('#', '['))], ['FINAL,PROXY'])
+                entries = [line.split(', ') for line in remote.splitlines()]
+                self.assertTrue(all(e[0].startswith(base) and e[0].endswith('/' + e[2][4:] + '.list') and e[3] == 'enabled=true' for e in entries))
+                order = [e[2][4:] for e in entries]
+                self.assertEqual(order[:2], ['private', 'lan'])
+                self.assertEqual('reject' in order, ads)
+                self.assertLess(order.index('apple'), order.index('proxy'))
+                self.assertEqual(order[-1], 'cn')
+                self.assertIn('policy=APPLE', remote)
+                for entry in entries:
+                    self.assertTrue((root / 'out/loon' / (entry[2][4:] + '.list')).is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

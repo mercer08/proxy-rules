@@ -317,7 +317,10 @@ def verify_cdn(config, rules_dir, digest):
     origin = rule_origin(config, digest)
     files = set()
     raw = "https://raw.githubusercontent.com/" + config["repository"] + "/release/"
-    for client, filename in (("surge", "rules.conf"), ("mihomo", "rules.yaml"), ("shadowrocket", "rules.conf")):
+    fragments = [("surge", "rules.conf"), ("mihomo", "rules.yaml"), ("shadowrocket", "rules.conf")]
+    if (rules_dir / "loon/rules.conf").is_file():
+        fragments.append(("loon", "rules.conf"))
+    for client, filename in fragments:
         fragment = strip_private_rule_references((rules_dir / client / filename).read_text(), client)
         files.update(re.findall(re.escape(raw) + r"([a-z0-9-]+/[a-z0-9-]+\.(?:list|domainset|yaml))", fragment))
     if not files:
