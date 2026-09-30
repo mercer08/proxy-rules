@@ -2,7 +2,7 @@
 
 以 [Loyalsoldier/clash-rules](https://github.com/Loyalsoldier/clash-rules) 为社区基底，
 补充 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) 的独立 AI 类别，
-叠加公开业务规则，每天生成 Surge、Mihomo 和 Shadowrocket 的规则文件。
+叠加公开业务规则，每天生成 Surge、Mihomo、Shadowrocket 和 Loon 的规则文件。
 每个来源在构建时固定提交，manifest 记录各类别来源提交和输入校验值。
 
 默认采用「国内直连，其余代理」。选取必要类别来简化维护，但 Loyalsoldier 的国内域名列表本身较大，
@@ -21,12 +21,14 @@
 | Surge | [rules.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/surge/rules.conf) | [rules-ads.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/surge/rules-ads.conf) |
 | Mihomo | [rules.yaml](https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/rules.yaml) | [rules-ads.yaml](https://raw.githubusercontent.com/mercer08/proxy-rules/release/mihomo/rules-ads.yaml) |
 | Shadowrocket | [rules.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/shadowrocket/rules.conf) | [rules-ads.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/shadowrocket/rules-ads.conf) |
+| Loon | [rules.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/loon/rules.conf) | [rules-ads.conf](https://raw.githubusercontent.com/mercer08/proxy-rules/release/loon/rules-ads.conf) |
 
 上表是原始规则片段。完整个人配置由 [deployment](deployment/README.md) 私有生成并仅通过 SSH 导出：公共规则使用
 固定发布标签的 jsDelivr URL，Mihomo 经 DIRECT 下载；WAN 和券商规则仅在自用配置中引用 CDN，LAN 内部域名仅从私有配置台内嵌。
 GitHub Actions 发布后预热并校验 CDN 公共文件，DMIT 对首次采用的版本再次校验。
 jsDelivr 支持 GitHub 文件自动缓存，但其 Near China 网络不保证所有大陆线路可达。
-Surge 及 Shadowrocket 的下载方式应在完整配置中设置。不要把 GitHub 登录令牌放进分发给朋友的配置。
+Surge、Shadowrocket 及 Loon 的下载方式应在完整配置中设置。
+Loon 片段把规则集放在 `[Remote Rule]`：Loon 3.0.3 起总是先匹配本地 `[Rule]`，远程规则集按列出顺序匹配。不要把 GitHub 登录令牌放进分发给朋友的配置。
 
 完整下载包及可回滚版本见 [Releases](https://github.com/mercer08/proxy-rules/releases)。
 `checksums.sha256` 覆盖生成文件和 manifest；校验和用于完整性检查，不是独立的真实性签名。
@@ -136,7 +138,7 @@ shasum -a 256 -c checksums.sha256
 输出目录必须为空，防止旧产物混进新版本。可用 `--upstream-commit` 固定历史上游版本。
 编辑 `tests/cases.json` 可添加关键域名或已知 IP 的预期策略；这些用例会对广告开启、关闭两种模式检查。
 
-本项目检查语法和分流意图，不声称完成所有 Surge／Shadowrocket 版本的原生导入测试。
+本项目检查语法和分流意图，不声称完成所有 Surge／Shadowrocket／Loon 版本的原生导入测试。
 首次接入完整配置时应在实际设备上验证，尤其是 DNS、下载路径和 UDP 行为。
 
 ## 与 DMIT / Sub-Store 串联
@@ -159,4 +161,4 @@ DMIT 拉取完整版本包并校验 → 解压到新的版本目录 → 校验�
 请参阅 [NOTICE.md](NOTICE.md) 和 [LICENSE](LICENSE)。转换保留所选上游发布文件的语义，
 不能恢复已经被上游构建过滤掉的正则或其他规则类型。
 
-私有配置台分别提供 Surge、Mihomo、Stash、Shadowrocket 完整配置。Stash 请使用 `stash.yaml`，避免混入 Mihomo 专有 provider/DNS 语法。本人三个设备兜底 PROXY，其他账号兜底 DIRECT；显式代理规则仍保持 PROXY。
+私有配置台分别提供 Surge、Mihomo、Stash、Shadowrocket、Loon 完整配置。Stash 请使用 `stash.yaml`，避免混入 Mihomo 专有 provider/DNS 语法。本人三个设备兜底 PROXY，其他账号兜底 DIRECT；显式代理规则仍保持 PROXY。
