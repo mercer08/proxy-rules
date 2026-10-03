@@ -2,7 +2,7 @@
   "schema_version": 1,
   "upstream": {
     "repository": "MetaCubeX/meta-rules-dat",
-    "commit": "c98b7dfd30a369df1d093d8394e68f0a2d970ca3"
+    "commit": "cb3e075825906a4dcc2feff84e3d6cc5691d9416"
   },
   "counts": {
     "microsoft": 746,
@@ -15,9 +15,9 @@
     "steam": 60
   },
   "input_sha256": {
-    "microsoft": "a458f99c2c380a90cbac75c405d6ae121efcc90d6ebddbe8302ed3e5a2458914",
+    "microsoft": "400f501f2d55492a2289a1dd36c30ff2967eea63c481b83aaf18558df7050cae",
     "paypal": "3add0df2f1db116b8987d3c1e0d8609f5a48e11a95197f07c4222d76239f152b",
-    "google": "4899a38e1c8e61d7bb5fe58a3bda42432cef481a62c228e33f156ba78bf005f7",
+    "google": "c5b3d5f161f0598a1a127b1a7148dd597a60fe3cbc403cfce68df7a34b22028c",
     "github": "e1c015908fae8789afb5adc395e8bbf6acb3868a48462968431eeefda0c8ca26",
     "youtube": "ec32854438b8ad4e2f2f2ee0d578834c667f1d0cec4c82357e34629452d2fc5d",
     "netflix": "4cf3bf6f2b28d578894d767415bbca0cc8ff4bf326b1ad8fffd59dba41da016f",
@@ -27,7 +27,7 @@
   "sha256": {
     "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
     "steam.yaml": "01c31d29e98b831326e046f8cdb8f2a693df6eecd74898ba38da56a656a13e6a",
-    "NOTICE.md": "30cdf2d2b3c4d722130d233fc2cc945948239833023dda083c621b6ec669f59d",
+    "NOTICE.md": "9820870749557d226f7503aaa521bd4d89970d961608d1bf2fdd5431a25d9112",
     "google.yaml": "beb98297406b75ef800569eee6dc2fd48a733e3548e3ded655a9409088a333b5",
     "telegram.list": "a1a39e45b89ce8da3def2ed862bdeef0fa67acb9ca50ea3cb017b9a2dd4623d8",
     "steam.list": "b5328808bed17c0784184397bb50084c2f5a1a8bf425389fb089f04cfc4cd4b2",
@@ -44,5 +44,5 @@
     "netflix.list": "48473b4ae3ea24618295f297687c43ab1f9de428ef8f09385feceb787c59f663",
     "netflix.yaml": "bd07698ccb1791930f8fd5b6b04b925acd51b5aa46deadb4f151d19ef34d2152"
   },
-  "content_digest": "198b35899676ddd00f5159d6100a6b47f14a7551acd8bfe8432f17bebd9abc72"
+  "content_digest": "6446273ca136acf5c4ec6a0eefabc87c8e93e7c08433b88b1897c53370a75573"
 }
