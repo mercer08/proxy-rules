@@ -2,23 +2,23 @@
   "schema_version": 1,
   "upstream": {
     "repository": "MetaCubeX/meta-rules-dat",
-    "commit": "32bbb6c45c63a491c571f98cd9d863d7fd6771dc"
+    "commit": "ad2798bba7340c09298f364bebedebbfa4398f5b"
   },
   "counts": {
-    "microsoft": 746,
+    "microsoft": 747,
     "paypal": 245,
     "google": 1075,
-    "github": 64,
+    "github": 65,
     "youtube": 178,
     "netflix": 24,
     "telegram": 21,
     "steam": 60
   },
   "input_sha256": {
-    "microsoft": "08369cf10f3973e18a1a81dfbb81aa9dc3433a6462509f8e68b835b9d0fbee42",
+    "microsoft": "01d79be6fe2f55a890890414ae299462f1f1c1756529a70132e3fbba3471e02a",
     "paypal": "3add0df2f1db116b8987d3c1e0d8609f5a48e11a95197f07c4222d76239f152b",
-    "google": "390446501c901d16012fda169a685f479827efd74ac68b0012e0a04dbefcff15",
-    "github": "c07b100e75fdde973334007d5c312103d3be2220a71091a05ee79defbf6f7034",
+    "google": "8db1111b747f8f3e51d1318888ad7ec07d43790dafdd1b5ecead3d19cfce869a",
+    "github": "1c6b5790a087e3497effe3751c0f4d41ff018c0176ad7e41d09d6d51bf64a1d9",
     "youtube": "ec32854438b8ad4e2f2f2ee0d578834c667f1d0cec4c82357e34629452d2fc5d",
     "netflix": "4cf3bf6f2b28d578894d767415bbca0cc8ff4bf326b1ad8fffd59dba41da016f",
     "telegram": "4712014d6fcb434daf8b03b4740e37445109b42bc0e824f6acbce733ef92abb0",
@@ -27,7 +27,7 @@
   "sha256": {
     "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
     "steam.yaml": "01c31d29e98b831326e046f8cdb8f2a693df6eecd74898ba38da56a656a13e6a",
-    "NOTICE.md": "cbb37f8af348b50b654a1993dd71ed0b27908a4ad1082fa852fc7f544b076060",
+    "NOTICE.md": "7e2e86ab023c82a00363d90dec1105ffbe32bc0f394ab26bcf24fa03b15033ee",
     "google.yaml": "beb98297406b75ef800569eee6dc2fd48a733e3548e3ded655a9409088a333b5",
     "telegram.list": "a1a39e45b89ce8da3def2ed862bdeef0fa67acb9ca50ea3cb017b9a2dd4623d8",
     "steam.list": "b5328808bed17c0784184397bb50084c2f5a1a8bf425389fb089f04cfc4cd4b2",
@@ -35,14 +35,14 @@
     "youtube.list": "b1b22969700b54f84e8c4717cbae5b29bf601990fc4286424fc11b57099abcb6",
     "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
     "telegram.yaml": "37f0646c006a0479400080637c112f53a0e4b85c196df9f373a9e43f1e4b3f55",
-    "github.yaml": "26bc7ee08ae4ab3e77bb464eb5e72ef88cb308ce3773a54d7d247126a03d457b",
+    "github.yaml": "bc9a88bfc632dc9088fef97d04b463d769b8c205f3cb5f2c96477906aa435b95",
     "paypal.list": "7a1343cf94d90a02cb95088092e9b96009074c5c24ff51b01d695e035093a23b",
-    "microsoft.yaml": "686f4261bcf6a79e25fe058764e23288840edab50e7bde78b192fabf04163070",
-    "microsoft.list": "f1699f5d2b59c8ae80ef5e1fe2e6321665c2d32dc86235031c9f65307df908da",
-    "github.list": "d8fcde84bfdf4512a95b32666e4bd010304eaf457a62b5b5218ed52f4c4abea4",
+    "microsoft.yaml": "e77611b4f06f9304dda1f71186020d86bc80ef16443f51620f91e74e6ded4731",
+    "microsoft.list": "abf412cd1e1a43601c7a996aa0c443b09fb8319afe7a50a2489da10126916b0c",
+    "github.list": "efdffe71ddf6c003a94c77a93eec8d93286b4efa5a7d61a3d411dbfee0be53df",
     "paypal.yaml": "193d738a17871d2d6a8053c59fd91e6bc639ede219d99d59b520c4ca2de68efb",
     "netflix.list": "48473b4ae3ea24618295f297687c43ab1f9de428ef8f09385feceb787c59f663",
     "netflix.yaml": "bd07698ccb1791930f8fd5b6b04b925acd51b5aa46deadb4f151d19ef34d2152"
   },
-  "content_digest": "7546cd0652e24efd001df0b81e076838df2e91c7c2509cb492ba5a8d6cd90c01"
+  "content_digest": "3f7054619090892d3fc369a1c2e13fcec28b69b270a17280a1c35ad6c633403b"
 }
