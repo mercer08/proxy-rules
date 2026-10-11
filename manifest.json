@@ -1,6 +1,6 @@
 {
   "advertising_enabled_by_default": false,
-  "content_digest": "dbe7310d698adc2c7f81bf96fecc9a022aec370da8a5d0ae8e012ad4228eb19e",
+  "content_digest": "9a6b544814d8f4a05f0357b8be9f40f601731466ada849bb96c4560f1e306143",
   "counts": {
     "ai": 189,
     "apple": 218,
@@ -9,7 +9,7 @@
     "lan": 18,
     "private": 130,
     "proxy": 27041,
-    "reject": 190677,
+    "reject": 190942,
     "telegram": 12
   },
   "custom_counts": {
@@ -20,7 +20,7 @@
     "wan-com": 21
   },
   "input_sha256": {
-    "MetaCubeX/meta-rules-dat:geo/geosite/category-ai-!cn.yaml": "4c166b95f59db92326c0c035bfd7f00a6e3350b97af9f5e2fe2845b34a5e6089",
+    "MetaCubeX/meta-rules-dat:geo/geosite/category-ai-!cn.yaml": "658cabd58fcd8b8fdc9c1c2e830bd994195ff6a4d28f7b097a15519c7685684a",
     "apple.txt": "a47d516880dcf65f51d3b40e6a71c33253e0774bdc4a7ec0a0d0a09a4dd522a2",
     "cncidr.txt": "0db34dd0446a376f5a8a2948b1878acd4a4b697025c7c02df3e56e4fd876c352",
     "direct.txt": "6ecbfd74ab9682c1c9bf511fa0f734535514548a35e882bbf716cdb46e30ada1",
@@ -28,7 +28,7 @@
     "lancidr.txt": "82920b241dc328f1dc99849cf733ed8675a00a4ee0bdf64c892b332dfb7e1e2e",
     "private.txt": "3a04b128200ef8097d73b1496cbb23d24bc1e05d42fffb09f07c51699efb00b2",
     "proxy.txt": "52b3d688fee0baccf4e38513fc0e1fbf8fff26e01e4d728bf7d7614522795763",
-    "reject.txt": "c0448a668f2926f0b3cbf7a28775582b6a0b64c8a5a38dbfa9d52f7688902379",
+    "reject.txt": "9ebb5855708d946063ba32d73d7c421bb392960e66cb2ca9f1c6c17df6011f1a",
     "telegramcidr.txt": "328fca88c675763111c7f7585ec504e5c21ab9afb7a8ce6df33b7ac01b8a3ee0"
   },
   "ip_families": {
@@ -61,7 +61,7 @@
     "loon/lan.list": "8ab8507a3a09bbb3c9ff1c3e8f8fc83b913d260874cfe4475cd76421803bfaec",
     "loon/private.list": "5fb8cd14179ddf9996c63e887ae072d84fa7f2029fd3926633c5bd7482fd70f1",
     "loon/proxy.list": "dd07b326ce83d0420de087241c3b9ffd5c420f6a3e9228185cb80a46cba0d31c",
-    "loon/reject.list": "51e0e979c71864d9a5a91347616550dd775b768b6b1346dba7a35f260d5b7296",
+    "loon/reject.list": "60fd27176b8406d6c2f252246dee54f921415059765820a86646c191c96925fd",
     "loon/rules-ads.conf": "9ba7d677cc408dfb710b0238cd3bf5aaaaa2e87820d7e9a75af824d51f09a7f0",
     "loon/rules.conf": "ce8954e23caebbe52241114966e6196e369ce29b153cf6c0800b7497447fd139",
     "loon/telegram.list": "d331ac1fac619df933a563115a00998fbe15ef83c0b526a2794c49482fb02417",
@@ -77,7 +77,7 @@
     "mihomo/lan.yaml": "e5235a9cdff4ce7a3e01dc6c365b696562a449ec5d913727769f659dff644825",
     "mihomo/private.yaml": "b3bad68dc66f0629e42bc16340c77555130f0a20ed28fb3f549e9e600b9acaa9",
     "mihomo/proxy.yaml": "429a1e7248e57382162c8831a4c1123fc57c512d14316ce599c5913e5820f97a",
-    "mihomo/reject.yaml": "134eff7b5b3d896f3e81440e0eac4ccd348f2770ef06ce672f1d3d0d7a60bd5f",
+    "mihomo/reject.yaml": "90124b5fc02301de8cd0bf6491249ad206cbde951b281469ad13345bc127d215",
     "mihomo/rules-ads.yaml": "983e8d10d6fa6533d9028b3e0e85782ce3d03ded7d1ac4050c6a82476ad02bf9",
     "mihomo/rules.yaml": "cd78bdfd4fa4b9b743ce36c17bba2584809c746b9c2ea37da1860b33f390707e",
     "mihomo/telegram.yaml": "8468e572889c5d55e7dbf398b2666f0237d5a327d6e4b51352a76f6f26b25333",
@@ -93,7 +93,7 @@
     "shadowrocket/lan.list": "8ab8507a3a09bbb3c9ff1c3e8f8fc83b913d260874cfe4475cd76421803bfaec",
     "shadowrocket/private.list": "5fb8cd14179ddf9996c63e887ae072d84fa7f2029fd3926633c5bd7482fd70f1",
     "shadowrocket/proxy.list": "dd07b326ce83d0420de087241c3b9ffd5c420f6a3e9228185cb80a46cba0d31c",
-    "shadowrocket/reject.list": "51e0e979c71864d9a5a91347616550dd775b768b6b1346dba7a35f260d5b7296",
+    "shadowrocket/reject.list": "60fd27176b8406d6c2f252246dee54f921415059765820a86646c191c96925fd",
     "shadowrocket/rules-ads.conf": "b81a927e18bc2cc7990e03cb207884c637a6594c430a4b827f9ab108acc92d04",
     "shadowrocket/rules.conf": "d2109dca88952ed33c3aef5f2193ec28e036533ab125ecc920c3f3e183a69ec3",
     "shadowrocket/telegram.list": "d331ac1fac619df933a563115a00998fbe15ef83c0b526a2794c49482fb02417",
@@ -114,8 +114,8 @@
     "surge/private.list": "5fb8cd14179ddf9996c63e887ae072d84fa7f2029fd3926633c5bd7482fd70f1",
     "surge/proxy.domainset": "0be337dd3779cdfacbdfa1d7ae636322121e430093161ef0dd4c666793c9ecc0",
     "surge/proxy.list": "dd07b326ce83d0420de087241c3b9ffd5c420f6a3e9228185cb80a46cba0d31c",
-    "surge/reject.domainset": "d8b8167196d8fec21d8fdb6630a74fb11557768bb5a7342be606ea67145bf667",
-    "surge/reject.list": "51e0e979c71864d9a5a91347616550dd775b768b6b1346dba7a35f260d5b7296",
+    "surge/reject.domainset": "a3eca69105d54acf46d470a5e160ff4050e3adbd422cb2a2f597d1aabf8eb6de",
+    "surge/reject.list": "60fd27176b8406d6c2f252246dee54f921415059765820a86646c191c96925fd",
     "surge/rules-ads.conf": "271d1a54ada6bcc6cf7a1cb425a74397fd1f650f92f2d653f4c13623b475547b",
     "surge/rules.conf": "603439e17b9d1577dbf99a2c516f5d585fbe756bc7f14e513ad73996be26d964",
     "surge/telegram.list": "d331ac1fac619df933a563115a00998fbe15ef83c0b526a2794c49482fb02417",
@@ -124,53 +124,53 @@
   "source_upstreams": {
     "ai": {
       "branch": "meta",
-      "commit": "dad29637471fad8f29e85fdcee6a67d08ee5a779",
+      "commit": "b4d414227a182c5bc954283e4a83ee176dad671b",
       "repository": "MetaCubeX/meta-rules-dat"
     },
     "apple": {
       "branch": "release",
-      "commit": "9b852847e69e72576d31554288264d3d1249fd44",
+      "commit": "95e5d6a50402b221b277e0752626cdbd9b84a528",
       "repository": "Loyalsoldier/clash-rules"
     },
     "cn": {
       "branch": "release",
-      "commit": "9b852847e69e72576d31554288264d3d1249fd44",
+      "commit": "95e5d6a50402b221b277e0752626cdbd9b84a528",
       "repository": "Loyalsoldier/clash-rules"
     },
     "direct": {
       "branch": "release",
-      "commit": "9b852847e69e72576d31554288264d3d1249fd44",
+      "commit": "95e5d6a50402b221b277e0752626cdbd9b84a528",
       "repository": "Loyalsoldier/clash-rules"
     },
     "lan": {
       "branch": "release",
-      "commit": "9b852847e69e72576d31554288264d3d1249fd44",
+      "commit": "95e5d6a50402b221b277e0752626cdbd9b84a528",
       "repository": "Loyalsoldier/clash-rules"
     },
     "private": {
       "branch": "release",
-      "commit": "9b852847e69e72576d31554288264d3d1249fd44",
+      "commit": "95e5d6a50402b221b277e0752626cdbd9b84a528",
       "repository": "Loyalsoldier/clash-rules"
     },
     "proxy": {
       "branch": "release",
-      "commit": "9b852847e69e72576d31554288264d3d1249fd44",
+      "commit": "95e5d6a50402b221b277e0752626cdbd9b84a528",
       "repository": "Loyalsoldier/clash-rules"
     },
     "reject": {
       "branch": "release",
-      "commit": "9b852847e69e72576d31554288264d3d1249fd44",
+      "commit": "95e5d6a50402b221b277e0752626cdbd9b84a528",
       "repository": "Loyalsoldier/clash-rules"
     },
     "telegram": {
       "branch": "release",
-      "commit": "9b852847e69e72576d31554288264d3d1249fd44",
+      "commit": "95e5d6a50402b221b277e0752626cdbd9b84a528",
       "repository": "Loyalsoldier/clash-rules"
     }
   },
   "upstream": {
     "branch": "release",
-    "commit": "9b852847e69e72576d31554288264d3d1249fd44",
+    "commit": "95e5d6a50402b221b277e0752626cdbd9b84a528",
     "repository": "Loyalsoldier/clash-rules"
   }
 }
