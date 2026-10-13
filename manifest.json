@@ -2,7 +2,7 @@
   "schema_version": 1,
   "upstream": {
     "repository": "MetaCubeX/meta-rules-dat",
-    "commit": "83c8208bdfae92b1caaa29745f51f233b6f1847e"
+    "commit": "bf52d18cf9f047308cf3b1844e5e9211989d2e03"
   },
   "counts": {
     "microsoft": 747,
@@ -15,10 +15,10 @@
     "steam": 60
   },
   "input_sha256": {
-    "microsoft": "6f3b5096b02da8ac82235597810dfacf772ebbbd8eb340ccc51d00c87a4a491c",
+    "microsoft": "44a28cdfd07f9970a001de21b08e2b1ae99b07de521ef00533ba2a9ff273efa0",
     "paypal": "3add0df2f1db116b8987d3c1e0d8609f5a48e11a95197f07c4222d76239f152b",
-    "google": "024b2b86dd538b5d8e39b7b9554755d6014ea24784ed93184598877365190e54",
-    "github": "a4cde29dee08b937d6c2fabf256e032b9ceb3583942cffe05cf53fc9571d45b4",
+    "google": "05deb712d7d7f12e368cccee350b0664d103113f1b7b73bb25e3397516e96d2b",
+    "github": "1c6b5790a087e3497effe3751c0f4d41ff018c0176ad7e41d09d6d51bf64a1d9",
     "youtube": "ec32854438b8ad4e2f2f2ee0d578834c667f1d0cec4c82357e34629452d2fc5d",
     "netflix": "4cf3bf6f2b28d578894d767415bbca0cc8ff4bf326b1ad8fffd59dba41da016f",
     "telegram": "4712014d6fcb434daf8b03b4740e37445109b42bc0e824f6acbce733ef92abb0",
@@ -27,7 +27,7 @@
   "sha256": {
     "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
     "steam.yaml": "01c31d29e98b831326e046f8cdb8f2a693df6eecd74898ba38da56a656a13e6a",
-    "NOTICE.md": "8c6c79702d2f23b06d0bd032070fa5f7ec7868c7600d5889f0234172ce745652",
+    "NOTICE.md": "634166d55c8b3a42fcaaf086cba28a7ef2816073fc40d13e79ffc77bd5b966fc",
     "google.yaml": "beb98297406b75ef800569eee6dc2fd48a733e3548e3ded655a9409088a333b5",
     "telegram.list": "a1a39e45b89ce8da3def2ed862bdeef0fa67acb9ca50ea3cb017b9a2dd4623d8",
     "steam.list": "b5328808bed17c0784184397bb50084c2f5a1a8bf425389fb089f04cfc4cd4b2",
@@ -44,5 +44,5 @@
     "netflix.list": "48473b4ae3ea24618295f297687c43ab1f9de428ef8f09385feceb787c59f663",
     "netflix.yaml": "bd07698ccb1791930f8fd5b6b04b925acd51b5aa46deadb4f151d19ef34d2152"
   },
-  "content_digest": "dae91ec4ab09cba975f6ae12b082f006c82716b81a1bfa95a2f147806850f0eb"
+  "content_digest": "98622db1f021ea6e1f7713ccaf726e0b693978e491abcbb5269361d0e1bb0e06"
 }
