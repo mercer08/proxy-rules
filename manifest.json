@@ -2,7 +2,7 @@
   "schema_version": 1,
   "upstream": {
     "repository": "MetaCubeX/meta-rules-dat",
-    "commit": "9f2b7462c7508ad85a1137e70d502b783c89794d"
+    "commit": "74246501fd12b938b73482f406a6163d1e4a460f"
   },
   "counts": {
     "microsoft": 751,
@@ -15,9 +15,9 @@
     "steam": 61
   },
   "input_sha256": {
-    "microsoft": "5c294cf0c223ae1ab91359c40f28a62cd5dde26c984f6affc34a5b23c47a9b80",
+    "microsoft": "0b87c76a13879e6be7e6ea33fb4ad05149d57dc4d4b94fed7a8fe648f447ba62",
     "paypal": "3b13b6dfcb94d207c474bf7ae4ee754d13aabac93f649e8e07bd3a6df8b785c3",
-    "google": "38bc4b43837119ba900e0aa3cfde49e8d84b88058998e4978fa2b397b012f9ee",
+    "google": "966acb9e50cbc146469c399017f85ef186b2b23f6f8c0178f322f3fa678c21df",
     "github": "a4cde29dee08b937d6c2fabf256e032b9ceb3583942cffe05cf53fc9571d45b4",
     "youtube": "ec32854438b8ad4e2f2f2ee0d578834c667f1d0cec4c82357e34629452d2fc5d",
     "netflix": "8df5a09035034ed72169f566ccc08779f30cebc2bf47681bf512fceef1296a68",
@@ -25,24 +25,24 @@
     "steam": "47ad4e79ea85ae5c2d31cd9b8d7d9e5206cc09d371dba11d8d20e10d9da720c9"
   },
   "sha256": {
-    "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
-    "steam.yaml": "4aa480f1da0914dbc69fb51aceb820c3eb4e56e6058ed3d15cad2b25bbfc40c5",
-    "NOTICE.md": "9954d1280f2cfa3d7226b6e28fa89243430dc20706a64127d838d13c823d0e56",
-    "google.yaml": "1a0ec32a91d0f9cafb9f802c0ad710b931272992e718f2b60967e982e994a979",
-    "telegram.list": "a1a39e45b89ce8da3def2ed862bdeef0fa67acb9ca50ea3cb017b9a2dd4623d8",
-    "steam.list": "cedce81e4540d1dda9d11c90f3d65d5b8b505b98bd2f4221b95480056950079e",
-    "google.list": "3f4b10d23c2ac8a725991c517c877c3deba03bf1f80c2bd5237d6da4aab90e9d",
-    "youtube.list": "b1b22969700b54f84e8c4717cbae5b29bf601990fc4286424fc11b57099abcb6",
-    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
-    "telegram.yaml": "37f0646c006a0479400080637c112f53a0e4b85c196df9f373a9e43f1e4b3f55",
-    "github.yaml": "bc9a88bfc632dc9088fef97d04b463d769b8c205f3cb5f2c96477906aa435b95",
-    "paypal.list": "7a1343cf94d90a02cb95088092e9b96009074c5c24ff51b01d695e035093a23b",
-    "microsoft.yaml": "2fa3076253eca0dac426783692db750f777a7481cdbbad20ca42a8ccf160b761",
     "microsoft.list": "abd785cdbbdee0c8834ee007bc34c9c1bf617cba08e6228f2a2cc0e3f037d07e",
-    "github.list": "efdffe71ddf6c003a94c77a93eec8d93286b4efa5a7d61a3d411dbfee0be53df",
-    "paypal.yaml": "193d738a17871d2d6a8053c59fd91e6bc639ede219d99d59b520c4ca2de68efb",
+    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "paypal.list": "7a1343cf94d90a02cb95088092e9b96009074c5c24ff51b01d695e035093a23b",
+    "youtube.list": "b1b22969700b54f84e8c4717cbae5b29bf601990fc4286424fc11b57099abcb6",
     "netflix.list": "3de90a5741f543406544a82c3aa4b3f2b0f59f3dcdd20b997d15f6b408d6d8fd",
-    "netflix.yaml": "1afc79701c3f817928021a8d88770659d58814a6af40c9c3867f39e44c73a294"
+    "telegram.list": "a1a39e45b89ce8da3def2ed862bdeef0fa67acb9ca50ea3cb017b9a2dd4623d8",
+    "telegram.yaml": "37f0646c006a0479400080637c112f53a0e4b85c196df9f373a9e43f1e4b3f55",
+    "paypal.yaml": "193d738a17871d2d6a8053c59fd91e6bc639ede219d99d59b520c4ca2de68efb",
+    "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
+    "github.list": "efdffe71ddf6c003a94c77a93eec8d93286b4efa5a7d61a3d411dbfee0be53df",
+    "steam.list": "cedce81e4540d1dda9d11c90f3d65d5b8b505b98bd2f4221b95480056950079e",
+    "NOTICE.md": "b44a354f382bf50ec79985ece4959b28f2bf3faea49bfb756e3256c6f515f0be",
+    "github.yaml": "bc9a88bfc632dc9088fef97d04b463d769b8c205f3cb5f2c96477906aa435b95",
+    "netflix.yaml": "1afc79701c3f817928021a8d88770659d58814a6af40c9c3867f39e44c73a294",
+    "microsoft.yaml": "2fa3076253eca0dac426783692db750f777a7481cdbbad20ca42a8ccf160b761",
+    "steam.yaml": "4aa480f1da0914dbc69fb51aceb820c3eb4e56e6058ed3d15cad2b25bbfc40c5",
+    "google.list": "3f4b10d23c2ac8a725991c517c877c3deba03bf1f80c2bd5237d6da4aab90e9d",
+    "google.yaml": "1a0ec32a91d0f9cafb9f802c0ad710b931272992e718f2b60967e982e994a979"
   },
-  "content_digest": "0cb9c2a153459f1b2252729f9e84e3d3c7d16532935d650bbc8853cb9636b2a8"
+  "content_digest": "caf8292a7bc292405001eede676de35c8af26357c4b40b80ef7c85f657e9f1fb"
 }
