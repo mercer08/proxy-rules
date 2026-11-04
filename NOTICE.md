@@ -1,3 +1,3 @@
 Domain categories from MetaCubeX/meta-rules-dat, GPL-3.0.
 https://github.com/MetaCubeX/meta-rules-dat
-Upstream commit: ea0125e318b019267a12ff8294689e2f997991a9
+Upstream commit: bc735930f7942f1159094650f55012ff7e9644a0
