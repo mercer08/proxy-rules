@@ -2,7 +2,7 @@
   "schema_version": 1,
   "upstream": {
     "repository": "MetaCubeX/meta-rules-dat",
-    "commit": "7861772837d405921b48f911f458546b849b7e66"
+    "commit": "e731d6be701afb91548fe0b76380d5022f7f4c02"
   },
   "counts": {
     "microsoft": 754,
@@ -15,9 +15,9 @@
     "steam": 61
   },
   "input_sha256": {
-    "microsoft": "d462cd85fce4b824c3f652cf0cc6c0aea6c907334f45e0ac3793f34f4b466774",
+    "microsoft": "9820cac70528ac2bcfffb8ffc75484909ae7b4d117e5f368c957ce83adfb2ff9",
     "paypal": "3b13b6dfcb94d207c474bf7ae4ee754d13aabac93f649e8e07bd3a6df8b785c3",
-    "google": "4cc8758ad6dab49fa2610eaeaf69626241c7210952ee783999833b2367c5d308",
+    "google": "2f3fce1bab53ce3aba1d497c38dfaf74395f7f5b074d6f794aab11271c7d41a7",
     "github": "d13336c90dca1e73ab42da19c865e2e7f116d5288d061bc1bf9597fbc411d623",
     "youtube": "ec32854438b8ad4e2f2f2ee0d578834c667f1d0cec4c82357e34629452d2fc5d",
     "netflix": "8df5a09035034ed72169f566ccc08779f30cebc2bf47681bf512fceef1296a68",
@@ -36,7 +36,7 @@
     "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
     "github.list": "dad439a302276b6265dc98e96ee6f7b47686180139573cf6ee963f43162b2e9b",
     "steam.list": "cedce81e4540d1dda9d11c90f3d65d5b8b505b98bd2f4221b95480056950079e",
-    "NOTICE.md": "edf781b27eb391876b758b541c1d54660bc68ff42efb44d8c08c403905fe8975",
+    "NOTICE.md": "5566f918bcf953b4e901593553d196127195f18a608480cf8b38224567d7729e",
     "github.yaml": "864cfd595e3ead01a03a79b33831923f4038cd0974a35767a09be0c1e98f0a3a",
     "netflix.yaml": "1afc79701c3f817928021a8d88770659d58814a6af40c9c3867f39e44c73a294",
     "microsoft.yaml": "1869da8beb11ce7fb913f7e0d3f353056222e3a07c666355defec120a35f958d",
@@ -44,5 +44,5 @@
     "google.list": "3f4b10d23c2ac8a725991c517c877c3deba03bf1f80c2bd5237d6da4aab90e9d",
     "google.yaml": "1a0ec32a91d0f9cafb9f802c0ad710b931272992e718f2b60967e982e994a979"
   },
-  "content_digest": "2a48fa435fa2f2d1cffd6a46a40f36e9610a6123da09b2eb874ec403c8d25218"
+  "content_digest": "4f9a4aecfd7c4e4ea0a90cfb0fa86295b750d576946ee45ba34c22be3044893a"
 }
