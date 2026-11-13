@@ -2,7 +2,7 @@
   "schema_version": 1,
   "upstream": {
     "repository": "MetaCubeX/meta-rules-dat",
-    "commit": "a08d80c786668262381318e6c11cb13527a525e3"
+    "commit": "2963a49408bbc37f2c2ffa6e8329fe11076a816b"
   },
   "counts": {
     "microsoft": 754,
@@ -15,9 +15,9 @@
     "steam": 61
   },
   "input_sha256": {
-    "microsoft": "6923852cba5a803960373c6eb379d7746460ba3069e1564549bc63177ee3c20c",
+    "microsoft": "a0c0c451ac04ff206881c8dcfb5a1c5b1dfab27ca968eb858992a666ba25c00c",
     "paypal": "3b13b6dfcb94d207c474bf7ae4ee754d13aabac93f649e8e07bd3a6df8b785c3",
-    "google": "604a56268fcf4e0c4ccaa16048d447f99d1a68164cc3ff5160fea00c5ffde3f4",
+    "google": "37dddef99da409e9f24b038286cfd63742e58111324526c9e12937796f21e4f2",
     "github": "d13336c90dca1e73ab42da19c865e2e7f116d5288d061bc1bf9597fbc411d623",
     "youtube": "ec32854438b8ad4e2f2f2ee0d578834c667f1d0cec4c82357e34629452d2fc5d",
     "netflix": "8df5a09035034ed72169f566ccc08779f30cebc2bf47681bf512fceef1296a68",
@@ -36,7 +36,7 @@
     "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
     "github.list": "dad439a302276b6265dc98e96ee6f7b47686180139573cf6ee963f43162b2e9b",
     "steam.list": "cedce81e4540d1dda9d11c90f3d65d5b8b505b98bd2f4221b95480056950079e",
-    "NOTICE.md": "a92ca667f8a33e669069deafb193ae4e8d4411811a6b4811a2ab10c184addfcb",
+    "NOTICE.md": "3c8a7cc5160b62ece0268607a875e89ad5f962a98b71bcf0dec3910dd0a7dd5a",
     "github.yaml": "864cfd595e3ead01a03a79b33831923f4038cd0974a35767a09be0c1e98f0a3a",
     "netflix.yaml": "1afc79701c3f817928021a8d88770659d58814a6af40c9c3867f39e44c73a294",
     "microsoft.yaml": "1869da8beb11ce7fb913f7e0d3f353056222e3a07c666355defec120a35f958d",
@@ -44,5 +44,5 @@
     "google.list": "3f4b10d23c2ac8a725991c517c877c3deba03bf1f80c2bd5237d6da4aab90e9d",
     "google.yaml": "1a0ec32a91d0f9cafb9f802c0ad710b931272992e718f2b60967e982e994a979"
   },
-  "content_digest": "d46b78d57fea5c70a734ba4e3be9987bef0b8b87a39462db77ca61421e28f535"
+  "content_digest": "ddbf87fd087d58f52111a19ffe5d92096401b96990f02c3f7ad0232cdb01266c"
 }
