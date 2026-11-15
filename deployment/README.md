@@ -236,7 +236,26 @@ GitHub、Google、Telegram、YouTube、Netflix、Steam 服务规则和券商规�
 `shadowrocket` 的 `[General]` 参数、静态 `hosts` 和 `rules_prepend`。DNS policy 按键合并，保留
 生成的 AI/服务分类及家庭 WireGuard 的 DNS；fake-ip-filter 追加去重。
 `hosts` 按域名合并，保留其他生成映射；相同域名以网络输入为准。
+Surge 的 `hosts` 还支持 `server:system`、`server:<IP>` 和 `server:https://...`，
+可让公司域名使用所在网络的 DNS，并给 WireGuard endpoint 指定独立解析路径。
+直连 DoH 地址必须在通用 `PROTOCOL,DOH,PROXY` 之前显式匹配 DIRECT。
+`[General]` 更新只修改该段，不修改 WireGuard 段的同名参数；缺少该段时报错。
+DNS policy 覆盖既有键时保留顺序，新键追加；生成器的 AI 分类排序仍单独生效。
+`network_profiles` 中未知的账号 email 会拒绝生成，避免拼写错误静默失效。
 私有输入不提交 GitHub；只提交生成器、示例、测试及脱敏文档。
+
+不要在 `rules_prepend` 中加入全局 STUN 端口或协议强制代理规则：这会覆盖
+HOME、公司、LAN 和既有直连例外。当前 STUN 遵循正常目标分流，直连目标可以
+观察到家庭公网出口；这不构成“WebRTC 无泄露”的保证。
+
+路由器的 `system` 若指向本机 dnsmasq，而 dnsmasq 又转发到 Mihomo，就有回流风险。
+此部署的路由器账号将 private 策略设为 `rcode://refused`（已配置 hosts 仍优先应答），
+lan-com 使用显式直连 DoH。终端账号的系统 DNS 用途不同，不统一替换。
+验证真实解析要选择 fake-ip-filter 内、无 hosts 映射的域名，并记录 rcode、
+真实地址和耗时；收到 198.18.0.0/16 仅代表 fake-ip 分配成功。
+
+生成仍按整代原子发布：任何账号输入或渲染失败时保留上一代全部文件并报错，
+不发布不完整的一代。修正输入后再生成；这期间其他账号仍提供旧版文件。
 
 Nikki 保留 TUN、监听端口、控制 API 和防火墙接管等运行设置。将 DNS 服务器、
 policy、hosts、fake-ip-filter 和自定义 rules 迁入私有输入后，删除相应 UCI 混入项，

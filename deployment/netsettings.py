@@ -3,6 +3,7 @@ import json
 import ipaddress
 from pathlib import Path
 import re
+from urllib.parse import urlsplit
 
 YAML_CLIENTS = {'mihomo': 'mihomo.yaml', 'stash': 'stash.yaml'}
 INI_CLIENTS = {'surge': 'surge.conf', 'shadowrocket': 'shadowrocket.conf', 'loon': 'loon.conf'}
@@ -46,9 +47,20 @@ def validate(settings):
             if not isinstance(hosts, dict):
                 raise ValueError('Invalid static hosts')
             for name, address in hosts.items():
-                if not re.fullmatch(r'[A-Za-z0-9_.-]+', name) or not isinstance(address, str):
+                if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_*?.-]+', name) or not isinstance(address, str):
                     raise ValueError('Invalid static host')
-                ipaddress.ip_address(address)
+                if client == 'surge' and address.startswith('server:'):
+                    resolver = address[len('server:'):]
+                    if resolver == 'system':
+                        continue
+                    if resolver.startswith('https://'):
+                        url = urlsplit(resolver)
+                        if not re.fullmatch(r'https://[A-Za-z0-9.:-]+/[A-Za-z0-9/_-]+', resolver) or not url.hostname or url.username or url.password:
+                            raise ValueError('Invalid host DNS server')
+                    else:
+                        ipaddress.ip_address(resolver)
+                else:
+                    ipaddress.ip_address(address)
             general = options.get('general', {})
             if not isinstance(general, dict) or any(not re.fullmatch('[a-z][a-z0-9-]*', k) or not isinstance(v, str) or any(c in v for c in '\r\n') for k, v in general.items()):
                 raise ValueError('Invalid General settings')
@@ -85,11 +97,18 @@ def yaml_dns(text, changes, yaml_block):
             value = list(dict.fromkeys(old + value))
         replacement = '\n'.join(yaml_block({key: value}, 2)) + '\n'
         if key == 'nameserver-policy' and existing:
-            # Replace only requested keys, preserving all generated service/home policies.
+            # Replace requested keys in place: policy order determines precedence.
             previous = existing[0].split('\n', 1)[1]
-            for name in value:
-                previous = re.sub(r'(?m)^    (?:' + re.escape(json.dumps(name)) + '|' + re.escape(name) + r'):[^\n]*\n(?:      [^\n]*\n)*', '', previous)
-            replacement = '  nameserver-policy:\n' + previous + '\n'.join(yaml_block(value, 4)) + '\n'
+            pending = dict(value)
+            for name, entry in value.items():
+                policy = r'(?m)^    (?:' + re.escape(json.dumps(name)) + '|' + re.escape(name) + r'):[^\n]*\n(?:      [^\n]*\n)*'
+                block = '\n'.join(yaml_block({name: entry}, 4)) + '\n'
+                previous, count = re.subn(policy, lambda _: block, previous, count=1)
+                if count:
+                    pending.pop(name)
+            replacement = '  nameserver-policy:\n' + previous
+            if pending:
+                replacement += '\n'.join(yaml_block(pending, 4)) + '\n'
         body = re.sub(pattern, lambda _: replacement, body, count=1) if existing else body + replacement
     return text[:match.start(1)] + body + text[match.end(1):]
 
@@ -115,7 +134,8 @@ def render(profiles, settings, yaml_block):
                     body += '\n'.join(yaml_block({name: address}, 2)) + '\n'
                 replacement = 'hosts:\n' + body
                 text = text[:section.start()] + replacement + text[section.end():] if section else replacement + text
-            header, marker, body = text.partition('rules:\n')
+            section = re.search(r'(?m)^rules:\n', text)
+            header, marker, body = (text[:section.start()], section[0], text[section.end():]) if section else (text, '', '')
             lines = ['  - ' + json.dumps(r) for r in options.get('rules_prepend', [])]
         else:
             hosts = options.get('hosts', {})
@@ -132,9 +152,16 @@ def render(profiles, settings, yaml_block):
                     text = text[:section.end()].rstrip() + '\n' + extra + text[section.end():]
                 else:
                     text += '\n[Host]\n' + extra
-            for key, value in options.get('general', {}).items():
-                text = re.sub(r'(?m)^' + re.escape(key) + r'\s*=.*\n?', '', text)
-                text = text.replace('[General]\n', '[General]\n' + key + ' = ' + value + '\n', 1)
+            general = options.get('general', {})
+            if general:
+                section = re.search(r'(?ms)^\[General\]\n(.*?)(?=^\[|\Z)', text)
+                if not section:
+                    raise ValueError('Missing generated General section')
+                body = section[1]
+                for key, value in general.items():
+                    body = re.sub(r'(?m)^' + re.escape(key) + r'\s*=.*\n?', '', body)
+                    body = key + ' = ' + value + '\n' + body
+                text = text[:section.start(1)] + body + text[section.end(1):]
             header, marker, body = text.partition('[Rule]\n')
             lines = options.get('rules_prepend', [])
         if not marker:

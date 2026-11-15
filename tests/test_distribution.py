@@ -214,6 +214,21 @@ class DistributionTests(unittest.TestCase):
             with tarfile.open(fileobj=io.BytesIO(cli_output.getvalue()), mode="r:gz") as exported:
                 self.assertEqual(len(exported.getmembers()), 8)
                 self.assertTrue(all(m.name.startswith("friend/") for m in exported.getmembers()))
+            # A later account failure must not publish the earlier account's partial generation.
+            previous_manifest = (state / 'profiles.json').read_bytes()
+            previous_generation = (state / 'profiles/current').resolve()
+            previous_files = {str(p.relative_to(previous_generation)): p.read_bytes()
+                              for p in previous_generation.rglob('*') if p.is_file()}
+            broken = {**accounts, 'friend': {**accounts['friend'], 'network': {
+                'schema_version': 1, 'surge': {'general': {'dns-server': 'system\n[Proxy]'}}}}}
+            with patch.object(d, 'load_accounts', return_value=broken), patch.object(d, 'substore', return_value=converted):
+                with self.assertRaises(ValueError):
+                    d.generate(config)
+            self.assertEqual(previous_manifest, (state / 'profiles.json').read_bytes())
+            self.assertEqual(previous_generation, (state / 'profiles/current').resolve())
+            self.assertEqual(previous_files, {str(p.relative_to(previous_generation)): p.read_bytes()
+                                             for p in previous_generation.rglob('*') if p.is_file()})
+            self.assertFalse(list((state / 'profiles/generations').glob('.staging-*')))
 
     def test_cdn_verification_rejects_tampering_and_never_fetches_business_rules(self):
         with tempfile.TemporaryDirectory() as temporary:

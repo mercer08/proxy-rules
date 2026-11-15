@@ -12,6 +12,44 @@ import netsettings as n
 
 
 class NetworkSettingsTests(unittest.TestCase):
+    def test_general_update_does_not_remove_wireguard_dns(self):
+        source = '[General]\ndns-server = system\n[WireGuard home-wg]\ndns-server = 10.0.0.1\n[Rule]\nFINAL,PROXY\n'
+        settings = {'schema_version': 1, 'surge': {'general': {'dns-server': '1.1.1.1'}}}
+        result = n.render({'surge.conf': source}, settings, d.yaml_block)['surge.conf']
+        self.assertIn('[General]\ndns-server = 1.1.1.1\n', result)
+        self.assertIn('[WireGuard home-wg]\ndns-server = 10.0.0.1\n', result)
+        self.assertEqual(result, n.render({'surge.conf': result}, settings, d.yaml_block)['surge.conf'])
+        with self.assertRaisesRegex(ValueError, 'General section'):
+            n.render({'surge.conf': '[Rule]\nFINAL,PROXY\n'}, settings, d.yaml_block)
+
+    def test_prepend_targets_top_level_rules_not_sub_rules(self):
+        source = 'dns:\n  enable: true\nsub-rules:\n  child:\n    - MATCH,DIRECT\nrules:\n  - MATCH,PROXY\n'
+        settings = {'schema_version': 1, 'mihomo': {'rules_prepend': ['DOMAIN,example.com,DIRECT']}}
+        parsed = yaml.safe_load(n.render({'mihomo.yaml': source}, settings, d.yaml_block)['mihomo.yaml'])
+        self.assertEqual(parsed['sub-rules'], {'child': ['MATCH,DIRECT']})
+        self.assertEqual(parsed['rules'], ['DOMAIN,example.com,DIRECT', 'MATCH,PROXY'])
+
+    def test_overridden_dns_policy_keeps_precedence(self):
+        source = '\n'.join(d.yaml_block({'dns': {'nameserver-policy': {
+            '+.example.com': ['system'], 'geosite:cn': ['system'], '+.other.com': ['system']}}, 'rules': ['MATCH,PROXY']})) + '\n'
+        settings = {'schema_version': 1, 'mihomo': {'dns': {'nameserver-policy': {
+            '+.example.com': ['https://1.1.1.1/dns-query'], '+.new.com': ['system']}}}}
+        result = n.render({'mihomo.yaml': source}, settings, d.yaml_block)
+        policy = yaml.safe_load(result['mihomo.yaml'])['dns']['nameserver-policy']
+        self.assertEqual(list(policy), ['+.example.com', 'geosite:cn', '+.other.com', '+.new.com'])
+        self.assertEqual(result, n.render(result, settings, d.yaml_block))
+
+    def test_surge_domain_resolvers_and_rejects_injection(self):
+        settings = {'schema_version': 1, 'surge': {'hosts': {
+            'tunnel.example': 'server:https://223.5.5.5/dns-query', '*.office.example': 'server:system'}}}
+        result = n.render({'surge.conf': '[General]\n[Rule]\nFINAL,PROXY\n'}, settings, d.yaml_block)
+        self.assertIn('*.office.example = server:system', result['surge.conf'])
+        self.assertIn('tunnel.example = server:https://223.5.5.5/dns-query', result['surge.conf'])
+        self.assertEqual(result, n.render(result, settings, d.yaml_block))
+        settings['surge']['hosts']['tunnel.example'] += '\n[Proxy]'
+        with self.assertRaises(ValueError):
+            n.validate(settings)
+
     def test_merge_preserves_generated_dns_and_local_hosts(self):
         original = {'dns': {'nameserver': ['system'], 'fake-ip-filter': ['rule-set:private'],
                            'nameserver-policy': {'rule-set:ai': ['https://1.1.1.1/dns-query#AI'], 'rule-set:private': ['system']}},
@@ -58,6 +96,14 @@ class NetworkSettingsTests(unittest.TestCase):
                       'network_profiles': {'router-email': str(private)}}
             account = d.load_accounts(config)['different-sub-id']
             self.assertTrue(account['network']['mihomo']['dns']['respect-rules'])
+            config['network_profiles'] = {'misspelled-email': str(private)}
+            with self.assertRaisesRegex(ValueError, 'unknown account email'):
+                d.load_accounts(config)
+            config['network_profiles'] = {'router-email': str(private)}
+            connection = sqlite3.connect(database)
+            connection.execute('UPDATE inbounds SET enable=0')
+            connection.commit(); connection.close()
+            self.assertEqual(d.load_accounts(config), {})
 
     def test_surge_proxy_bootstrap_mapping_keeps_tunnel_dns(self):
         source = '[General]\ndns-server = system\n[Proxy]\nnode = vmess, node.example, 443\n[Rule]\nFINAL,PROXY\n[Host]\n*.home.arpa = server:192.168.1.1\n'

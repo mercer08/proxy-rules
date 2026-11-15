@@ -34,7 +34,6 @@
       "hijack-dns": "*:53"
     },
     "rules_prepend": [
-      "PROTOCOL,STUN,PROXY",
       "PROTOCOL,DOH,PROXY",
       "PROTOCOL,DOH3,PROXY",
       "PROTOCOL,DOQ,PROXY",

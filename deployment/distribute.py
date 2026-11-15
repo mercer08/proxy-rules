@@ -199,6 +199,7 @@ def load_accounts(config, now=None):
     connection.execute("BEGIN")
     try:
         accounts = {}
+        known_emails = set()
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         canonical = None
         membership = set()
@@ -206,8 +207,11 @@ def load_accounts(config, now=None):
             connection.row_factory = sqlite3.Row
             canonical = {row["sub_id"]: dict(row) for row in connection.execute("SELECT * FROM clients")}
             membership = {(row[0], row[1]) for row in connection.execute("SELECT client_id,inbound_id FROM client_inbounds")}
+            known_emails.update(client['email'] for client in canonical.values())
         rows = connection.execute("SELECT id,tag,enable,protocol,settings,stream_settings FROM inbounds").fetchall()
         for inbound_id, tag, enabled, protocol, settings_raw, stream_raw in rows:
+            if canonical is None:
+                known_emails.update(client.get('email') for client in json.loads(settings_raw).get('clients', []))
             mapping = config["inbounds"].get(tag)
             if mapping is None or not enabled:
                 continue
@@ -255,6 +259,8 @@ def load_accounts(config, now=None):
                         "network": "ws", "udp": bool(mapping.get("udp", False)),
                         "ws-opts": {"path": ws["path"], "headers": {"Host": config["server"]}}}
                 account["nodes"].append(node)
+        if set(network_inputs) - known_emails:
+            raise ValueError('network_profiles contains unknown account email')
         for account in accounts.values():
             order = {mapping["name"]: index for index, mapping in enumerate(config["inbounds"].values())}
             account["nodes"].sort(key=lambda node: order[node["name"]])
