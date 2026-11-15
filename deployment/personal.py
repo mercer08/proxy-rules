@@ -8,9 +8,19 @@ from pathlib import Path
 import re
 import tempfile
 
-CATEGORIES = ('microsoft', 'paypal', 'google', 'github', 'youtube', 'netflix', 'telegram', 'steam')
-PUBLIC_GROUPS = ('AI', 'APPLE', 'MICROSOFT', 'PAYPAL', 'GOOGLE', 'GITHUB', 'TELEGRAM', 'YOUTUBE', 'NETFLIX', 'STEAM', 'COMPANY_WAN', 'BROKER', 'FINAL')
+CATEGORIES = ('github', 'microsoft', 'paypal', 'google', 'youtube', 'netflix', 'telegram', 'steam')
+STUN_DOMAINS = tuple('stun' + suffix + '.l.google.com' for suffix in ('', '1', '2', '3', '4'))
+
+# Same groups as the Surge profiles: other services and brokers go straight to PROXY.
+PUBLIC_GROUPS = ('AI', 'APPLE', 'MICROSOFT', 'PAYPAL', 'COMPANY_WAN', 'FINAL')
+# Defaults saved for groups that no longer exist are accepted and ignored.
+LEGACY_GROUPS = ('GOOGLE', 'GITHUB', 'TELEGRAM', 'YOUTUBE', 'NETFLIX', 'STEAM', 'BROKER')
 DEFAULTS = {g: ('DIRECT' if g in ('APPLE', 'MICROSOFT', 'PAYPAL') else 'PROXY') for g in PUBLIC_GROUPS}
+SERVICE_RULES = ('github', 'microsoft', 'paypal', 'telegram', 'youtube', 'netflix', 'steam', 'google')
+
+
+def service_policy(name):
+    return name.upper() if name in ('microsoft', 'paypal') else 'PROXY'
 
 
 def validate(settings):
@@ -19,7 +29,7 @@ def validate(settings):
     if set(settings) - {'schema_version', 'defaults', 'company_device', 'home_device', 'home_router', 'home_domains', 'home_networks', 'company_rules', 'force_proxy', 'force_direct'}:
         raise ValueError('Unknown personal setting')
     defaults = settings.get('defaults', {})
-    if not isinstance(defaults, dict) or set(defaults) - set(PUBLIC_GROUPS) or any(v not in ('PROXY', 'DIRECT') for v in defaults.values()):
+    if not isinstance(defaults, dict) or set(defaults) - set(PUBLIC_GROUPS + LEGACY_GROUPS) or any(v not in ('PROXY', 'DIRECT') for v in defaults.values()):
         raise ValueError('Invalid group defaults')
     for name in ('company_device', 'home_device'):
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', settings.get(name, '')):
@@ -125,7 +135,7 @@ def service_state(config):
 
 
 def choices(settings, group):
-    # AI always uses the proxy across every client, including older preferences.
+    # AI always uses the proxy, including older preferences.
     if group == 'AI':
         return ['PROXY']
     first = settings.get('defaults', {}).get(group, DEFAULTS[group])
@@ -133,7 +143,7 @@ def choices(settings, group):
 
 
 def domain_patterns(rules):
-    return [('+' + '.' if r.startswith('DOMAIN-SUFFIX,') else '') + r.split(',')[1] for r in rules if not r.startswith('DOMAIN-KEYWORD,')]
+    return [('+' + '.' if r.startswith('DOMAIN-SUFFIX,') else '') + r.split(',')[1] for r in rules if r.startswith(('DOMAIN,', 'DOMAIN-SUFFIX,'))]
 
 
 def prefix_rules(settings, private, client):
@@ -141,37 +151,96 @@ def prefix_rules(settings, private, client):
     rules = [r + ',PROXY' for r in settings.get('force_proxy', [])]
     rules += [r + ',DIRECT' for r in settings.get('force_direct', [])]
     rules += ['DOMAIN-SUFFIX,' + d + ',HOME' for d in settings.get('home_domains', [])]
-    rules += [r + ',COMPANY_LAN' for r in dict.fromkeys(settings.get('company_rules', []) + private)]
+    rules += [','.join(r.split(',')[:2] + ['COMPANY_LAN'] + r.split(',')[2:]) for r in dict.fromkeys(settings.get('company_rules', []) + private)]
     rules += [('IP-CIDR6' if ':' in n else 'IP-CIDR') + ',' + n + ',HOME,no-resolve' for n in settings.get('home_networks', [])]
     return rules
 
 
+def stun_compatibility(profiles, yaml_block):
+    output = dict(profiles)
+    for filename in ('mihomo.yaml', 'stash.yaml'):
+        if filename not in output:
+            continue
+        text = output[filename]
+        text = text.replace('  fake-ip-filter: []\n', '  fake-ip-filter:\n')
+        match = re.search(r'(?m)^  fake-ip-filter:\n(?:    [^\n]*\n)*', text)
+        if not match:
+            raise ValueError('Missing Fake-IP filter')
+        entries = '\n'.join(yaml_block([d for d in STUN_DOMAINS if d not in match.group()], 4))
+        if entries:
+            text = text[:match.end()] + entries + '\n' + text[match.end():]
+        output[filename] = text
+    return output
+
+
+def github_priority(profiles):
+    output = dict(profiles)
+    for filename, text in profiles.items():
+        if filename not in ('surge.conf', 'shadowrocket.conf', 'loon.conf', 'mihomo.yaml', 'stash.yaml'):
+            continue
+        lines = text.splitlines()
+        is_rule = lambda line, service: ('RULE-SET,svc-' + service + ',' in line if filename.endswith('.yaml') else
+                                         line.startswith('RULE-SET,') and '/' + service + '.list,' in line or '/' + service + '.list, policy=' in line)
+        github = [line for line in lines if is_rule(line, 'github')]
+        if github:
+            lines = [line for line in lines if not is_rule(line, 'github')]
+            index = next((i for i, line in enumerate(lines) if is_rule(line, 'microsoft')), None)
+            if index is None:
+                index = next((i for i, line in enumerate(lines) if 'RULE-SET,proxy,' in line or '/proxy.' in line or 'MATCH,' in line or line.startswith('FINAL,')), len(lines))
+            lines[index:index] = github
+        text = '\n'.join(lines) + '\n'
+        # Keep service DNS precedence consistent with its routing precedence.
+        if filename == 'mihomo.yaml':
+            match = re.search(r'(?m)^    "?rule-set:svc-github"?:\n(?:      [^\n]*\n)+', text)
+            if match:
+                block = match.group()
+                text = text[:match.start()] + text[match.end():]
+                policy = re.search(r'(?m)^  nameserver-policy:\n', text)
+                ai = re.search(r'(?m)^    "?rule-set:ai"?:\n(?:      [^\n]*\n)+', text)
+                index = ai.end() if ai else policy.end()
+                text = text[:index] + block + text[index:]
+        output[filename] = text
+    return output
+
+
 def render_global_services(profiles, config, yaml_block):
-    """Add only Microsoft and PayPal to every account; preserve personal profiles."""
+    """Add service routing and STUN compatibility to every supported client."""
+    profiles = stun_compatibility(profiles, yaml_block)
     if not config.get('global_service_groups'):
-        return profiles
+        return github_priority(profiles)
     pointer = service_state(config)
     origin = 'https://cdn.jsdelivr.net/gh/' + config['repository'] + '@' + pointer['tag'] + '/'
     output = dict(profiles)
-    names = ('microsoft', 'paypal')
+    names = ('github', 'microsoft', 'paypal')
     for filename, text in profiles.items():
-        if filename not in ('surge.conf', 'shadowrocket.conf', 'mihomo.yaml', 'stash.yaml'):
+        if filename not in ('surge.conf', 'shadowrocket.conf', 'loon.conf', 'mihomo.yaml', 'stash.yaml'):
             continue
         if filename.endswith('.conf'):
-            missing = [n for n in names if not re.search(r'(?m)^' + n.upper() + r'\s*=', text)]
-            rules_missing = [n for n in names if not re.search(r'(?m)^RULE-SET,[^\n]*?/' + n + r'\.list,' + n.upper() + r'(?:,|$)', text)]
+            # Converted Loon profiles keep rule sets under [Remote Rule].
+            remote = filename == 'loon.conf' and '\n[Remote Rule]\n' in text
+            missing = [n for n in names if service_policy(n) != 'PROXY' and not re.search(r'(?m)^' + n.upper() + r'\s*=', text)]
+            rules_missing = [n for n in names if not re.search(
+                r'(?m)^[^\n]*?/' + n + r'\.list, policy=' + service_policy(n) + ',' if remote else
+                r'(?m)^RULE-SET,[^\n]*?/' + n + r'\.list,' + service_policy(n) + r'(?:,|$)', text)]
             if not missing and not rules_missing:
                 continue
             header, body = text.split('[Rule]\n', 1)
             groups = [n.upper() + ' = select, DIRECT, PROXY' + (', policy-select-name=DIRECT' if filename == 'shadowrocket.conf' else '') for n in missing]
             header += '\n'.join(groups) + '\n' if groups else ''
+            if remote:
+                rules, remote_rules = body.split('\n[Remote Rule]\n', 1)
+                lines = remote_rules.splitlines()
+                index = next((i for i, l in enumerate(lines) if '/proxy.' in l), len(lines))
+                lines[index:index] = [origin + n + '.list, policy=' + service_policy(n) + ', tag=svc-' + n + ', enabled=true' for n in rules_missing]
+                output[filename] = header + '[Rule]\n' + rules + '\n[Remote Rule]\n' + '\n'.join(lines) + '\n'
+                continue
             lines = body.splitlines()
             index = next((i for i,l in enumerate(lines) if '/proxy.' in l or l.startswith('FINAL,')), len(lines))
-            lines[index:index] = ['RULE-SET,' + origin + n + '.list,' + n.upper() + ',update-interval=86400' for n in rules_missing]
+            lines[index:index] = ['RULE-SET,' + origin + n + '.list,' + service_policy(n) + ',update-interval=86400' for n in rules_missing]
             output[filename] = header + '[Rule]\n' + '\n'.join(lines) + '\n'
         else:
-            missing = [n for n in names if not re.search(r'(?m)^\s*-\s*$\n\s+name: "' + n.upper() + '"$', text)]
-            rules_missing = [n for n in names if 'RULE-SET,svc-' + n + ',' + n.upper() not in text]
+            missing = [n for n in names if service_policy(n) != 'PROXY' and not re.search(r'(?m)^\s*-\s*$\n\s+name: "' + n.upper() + '"$', text)]
+            rules_missing = [n for n in names if 'RULE-SET,svc-' + n + ',' + service_policy(n) not in text]
             if not missing and not rules_missing:
                 continue
             if missing:
@@ -186,7 +255,7 @@ def render_global_services(profiles, config, yaml_block):
                 marker = text.index('rules:\n')
                 text = text[:marker] + '\n'.join(yaml_block(providers, 2)) + '\n' + text[marker:]
             if filename == 'mihomo.yaml':
-                policies = {'rule-set:svc-' + n: ['https://dns.alidns.com/dns-query#' + n.upper()] for n in rules_missing}
+                policies = {'rule-set:svc-' + n: ['https://1.1.1.1/dns-query#PROXY' if service_policy(n) == 'PROXY' else 'https://dns.alidns.com/dns-query#' + n.upper()] for n in rules_missing}
                 text, count = re.subn(r'(?ms)^  nameserver-policy:\n.*?(?=^  \S|^[a-z]|\Z)',
                                      lambda m: m.group().rstrip() + '\n' + '\n'.join(yaml_block(policies, 4)) + '\n', text, count=1)
                 if policies and count != 1:
@@ -194,9 +263,9 @@ def render_global_services(profiles, config, yaml_block):
             header, body = text.split('rules:\n', 1)
             lines = body.splitlines()
             index = next((i for i,l in enumerate(lines) if 'RULE-SET,proxy,' in l or 'MATCH,' in l), len(lines))
-            lines[index:index] = ['  - ' + json.dumps('RULE-SET,svc-' + n + ',' + n.upper()) for n in rules_missing]
+            lines[index:index] = ['  - ' + json.dumps('RULE-SET,svc-' + n + ',' + service_policy(n)) for n in rules_missing]
             output[filename] = header + 'rules:\n' + '\n'.join(lines) + '\n'
-    return output
+    return github_priority(output)
 
 
 def render(profiles, config, account, private, yaml_block):
@@ -207,14 +276,18 @@ def render(profiles, config, account, private, yaml_block):
     pointer = service_state(config)
     origin = 'https://cdn.jsdelivr.net/gh/' + config['repository'] + '@' + pointer['tag'] + '/'
     output = dict(profiles)
-    for filename in ('surge.conf', 'shadowrocket.conf'):
-        client = 'surge' if filename == 'surge.conf' else 'shadowrocket'
+    for filename in ('surge.conf', 'shadowrocket.conf', 'loon.conf'):
+        if filename not in profiles:
+            continue
+        client = filename.split('.')[0]
         header, body = profiles[filename].split('[Rule]\n', 1)
         general, rest = header.split('[Proxy]\n', 1)
         nodes, _ = rest.split('[Proxy Group]\n', 1)
         general = re.sub(r'(?m)^dns-server\s*=.*$', 'dns-server = system', general)
         if client == 'surge':
             general = general.rstrip() + '\nencrypted-dns-server = https://dns.alidns.com/dns-query, https://doh.pub/dns-query\nhijack-dns = *:53\n'
+        elif client == 'loon':
+            general = general.rstrip() + '\ndoh-server = https://dns.alidns.com/dns-query,https://doh.pub/dns-query\nhijack-dns = *:53\n'
         groups = ['PROXY = select, ' + ', '.join(p['name'] for p in account['nodes'])]
         for group in PUBLIC_GROUPS:
             options = choices(settings, group)
@@ -223,12 +296,13 @@ def render(profiles, config, account, private, yaml_block):
             groups += ['COMPANY_LAN = select, DEVICE:' + settings['company_device'] + ', DIRECT',
                        'HOME = subnet, default=DEVICE:' + settings['home_device'] + ', ROUTER:' + settings['home_router'] + '=DIRECT']
         else:
+            selected = ', policy-select-name=DIRECT' if client == 'shadowrocket' else ''
             groups += ['# Local LAN access only. Surge Ponte requires Surge or a separately configured remote tunnel.',
-                       'COMPANY_LAN = select, DIRECT, REJECT, policy-select-name=DIRECT', 'HOME = select, DIRECT, REJECT, policy-select-name=DIRECT']
+                       'COMPANY_LAN = select, DIRECT, REJECT' + selected, 'HOME = select, DIRECT, REJECT' + selected]
         lines = body.splitlines()
-        lines = [l for l in lines if not (l.startswith('# Private rule set:') or any(l == r + ',DIRECT' for r in private))]
-        lines = [l.replace('/wan-com.list,PROXY', '/wan-com.list,COMPANY_WAN').replace('/futu-broker.list,PROXY', '/futu-broker.list,BROKER').replace('/telegram.list,PROXY', '/telegram.list,TELEGRAM') for l in lines]
-        services = ['RULE-SET,' + origin + name + '.list,' + name.upper() + ',update-interval=86400' for name in ('microsoft', 'paypal', 'github', 'telegram', 'youtube', 'netflix', 'steam', 'google')]
+        lines = [l for l in lines if not (l.startswith('# Private rule set:') or any(l == ','.join(r.split(',')[:2] + ['DIRECT'] + r.split(',')[2:]) for r in private))]
+        lines = [l.replace('/wan-com.list,PROXY', '/wan-com.list,COMPANY_WAN') for l in lines]
+        services = ['RULE-SET,' + origin + name + '.list,' + service_policy(name) + ',update-interval=86400' for name in SERVICE_RULES]
         index = next((i for i, l in enumerate(lines) if '/proxy.' in l), len(lines) - 1)
         lines[index:index] = services
         lines = prefix_rules(settings, private, client) + lines
@@ -254,7 +328,7 @@ def render(profiles, config, account, private, yaml_block):
         if client == 'mihomo':
             policies.update({'rule-set:private': ['system'], 'rule-set:lan-com': ['system']})
             for name in ('ai', 'apple', 'wan-com', 'futu-broker', *CATEGORIES, 'proxy', 'direct'):
-                group = {'wan-com': 'COMPANY_WAN', 'futu-broker': 'BROKER', 'proxy': 'PROXY', 'direct': 'DIRECT'}.get(name, name.upper())
+                group = {'wan-com': 'COMPANY_WAN', 'futu-broker': 'PROXY', 'proxy': 'PROXY', 'direct': 'DIRECT'}.get(name, service_policy(name) if name in CATEGORIES else name.upper())
                 direct = group == 'DIRECT' or group in ('APPLE', 'MICROSOFT', 'PAYPAL')
                 policies['rule-set:svc-' + name if name in CATEGORIES else 'rule-set:' + name] = ['https://dns.alidns.com/dns-query#' + group if direct and group != 'DIRECT' else 'https://dns.alidns.com/dns-query' if direct else 'https://1.1.1.1/dns-query#' + group]
             dns = {'enable': True, 'ipv6': False, 'enhanced-mode': 'fake-ip', 'fake-ip-range': '198.18.0.1/16',
@@ -273,10 +347,10 @@ def render(profiles, config, account, private, yaml_block):
         text = text[:marker] + '\n'.join(yaml_block(providers, 2)) + '\n' + text[marker:]
         header, body = text.split('rules:\n', 1)
         lines = body.splitlines()
-        lines = [l for l in lines if not any(l.strip() == '- ' + json.dumps(r + ',DIRECT') for r in private)]
-        lines = [l.replace('RULE-SET,lan-com,DIRECT', 'RULE-SET,lan-com,COMPANY_LAN').replace('RULE-SET,wan-com,PROXY', 'RULE-SET,wan-com,COMPANY_WAN').replace('RULE-SET,futu-broker,PROXY', 'RULE-SET,futu-broker,BROKER').replace('RULE-SET,telegram,PROXY', 'RULE-SET,telegram,TELEGRAM') for l in lines]
+        lines = [l for l in lines if not any(l.strip() == '- ' + json.dumps(','.join(r.split(',')[:2] + ['DIRECT'] + r.split(',')[2:])) for r in private)]
+        lines = [l.replace('RULE-SET,lan-com,DIRECT', 'RULE-SET,lan-com,COMPANY_LAN').replace('RULE-SET,wan-com,PROXY', 'RULE-SET,wan-com,COMPANY_WAN') for l in lines]
         index = next((i for i, l in enumerate(lines) if 'RULE-SET,proxy,' in l), len(lines) - 1)
-        lines[index:index] = ['  - ' + json.dumps('RULE-SET,svc-' + n + ',' + n.upper()) for n in ('microsoft', 'paypal', 'github', 'telegram', 'youtube', 'netflix', 'steam', 'google')]
+        lines[index:index] = ['  - ' + json.dumps('RULE-SET,svc-' + n + ',' + service_policy(n)) for n in SERVICE_RULES]
         lines = ['  - ' + json.dumps(r) for r in prefix_rules(settings, private, client)] + lines
         output[filename] = '# Personal profile. HOME/COMPANY_LAN are local only; remote access needs a separately configured tunnel.\n' + header + 'rules:\n' + '\n'.join(lines).strip('\n') + '\n'
     return output

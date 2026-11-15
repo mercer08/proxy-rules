@@ -57,6 +57,7 @@
       },
       "file": "geo/geosite/category-ai-!cn.yaml",
       "kind": "domain",
+      "mihomo_url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.yaml",
       "minimum": 50
     },
     "apple": {

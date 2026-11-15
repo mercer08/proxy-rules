@@ -67,6 +67,40 @@ def fixture(state):
 
 
 class PersonalTests(unittest.TestCase):
+    def test_mihomo_ai_updates_from_live_upstream_for_plain_and_personal_profiles(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            config, root, digest, node, converted = fixture(state)
+            services(state)
+            settings_file = state / 'personal-settings/phone.json'
+            d.atomic_write(settings_file, json.dumps(preferences()))
+            config['personal_profiles'] = {'phone': str(settings_file)}
+            config['global_service_groups'] = True
+            for settings in (None, preferences()):
+                account = {'business_rules': True, 'nodes': [node], 'label': 'fixture'}
+                if settings:
+                    account['personal'] = settings
+                outputs = d.render_profiles(config, account, converted, '', root, digest)
+                profile = yaml.safe_load(outputs['mihomo.yaml'])
+                self.assertEqual(profile['rule-providers']['ai'], {
+                    'type': 'http', 'behavior': 'domain', 'format': 'yaml',
+                    'url': d.AI_RULES_URL, 'path': './rules/ai.yaml',
+                    'interval': 86400, 'proxy': 'PROXY'})
+                self.assertEqual(profile['rules'].count('RULE-SET,ai,AI'), 1)
+                ai_index = profile['rules'].index('RULE-SET,ai,AI')
+                for name in ('svc-github', 'svc-microsoft', 'svc-paypal', 'wan-com', 'futu-broker', 'apple', 'proxy', 'direct'):
+                    matching = [i for i, rule in enumerate(profile['rules']) if rule.startswith('RULE-SET,' + name + ',')]
+                    self.assertTrue(matching, name)
+                    self.assertLess(ai_index, matching[0], name)
+                self.assertLess(profile['rules'].index('RULE-SET,private,DIRECT'), ai_index)
+                policies = list(profile['dns']['nameserver-policy'])
+                self.assertLess(policies.index('rule-set:ai'), policies.index('rule-set:svc-github'))
+                self.assertEqual(profile['proxies'], [node])
+                self.assertEqual(profile['dns']['nameserver-policy']['rule-set:ai'],
+                                 ['https://1.1.1.1/dns-query#AI'])
+                for name in ('surge.conf', 'stash.yaml', 'shadowrocket.conf', 'loon.conf'):
+                    self.assertNotIn(d.AI_RULES_URL, outputs[name])
+
     def test_categories_build_from_one_commit_and_publish_no_policies(self):
         with tempfile.TemporaryDirectory() as temporary:
             state = Path(temporary); pointer = services(state)
@@ -105,8 +139,14 @@ class PersonalTests(unittest.TestCase):
             self.assertIn('HOME = subnet, default=DEVICE:HOME_MAC, ROUTER:192.168.50.1=DIRECT', phone['surge.conf'])
             self.assertIn('FINAL,FINAL,dns-failed', phone['surge.conf'])
             self.assertLess(phone['surge.conf'].index('private.work.example,COMPANY_LAN'), phone['surge.conf'].index('/lan.list,DIRECT'))
-            self.assertLess(phone['surge.conf'].index('/ai.list,AI'), phone['surge.conf'].index('/google.list,GOOGLE'))
-            self.assertLess(phone['surge.conf'].index('/youtube.list,YOUTUBE'), phone['surge.conf'].index('/google.list,GOOGLE'))
+            self.assertLess(phone['surge.conf'].index('/ai.list,AI'), phone['surge.conf'].index('/google.list,PROXY'))
+            self.assertLess(phone['surge.conf'].index('/youtube.list,PROXY'), phone['surge.conf'].index('/google.list,PROXY'))
+            # Policy groups match the Surge profiles; other services and brokers use PROXY directly.
+            for name in ('surge.conf', 'shadowrocket.conf', 'loon.conf'):
+                groups = [l.split('=')[0].strip() for l in phone[name].split('[Proxy Group]\n')[1].split('\n[')[0].splitlines() if '=' in l and not l.startswith('#')]
+                self.assertEqual(groups, ['PROXY', 'AI', 'APPLE', 'MICROSOFT', 'PAYPAL', 'COMPANY_WAN', 'COMPANY_LAN', 'HOME', 'FINAL'], name)
+            for legacy in ('GOOGLE', 'GITHUB', 'TELEGRAM', 'YOUTUBE', 'NETFLIX', 'STEAM', 'BROKER'):
+                self.assertNotIn(legacy, d.normalize_profiles(phone)['surge.conf'].replace('/google.', '').upper().split('[PROXY GROUP]')[1].split('[RULE]')[0])
             for name in ('stash.yaml', 'mihomo.yaml'):
                 parsed = yaml.safe_load(phone[name]); groups = {g['name']: g['proxies'] for g in parsed['proxy-groups']}
                 self.assertEqual(groups['AI'], ['PROXY'])
@@ -114,7 +154,9 @@ class PersonalTests(unittest.TestCase):
                 self.assertEqual(groups['PAYPAL'][0], 'DIRECT')
                 self.assertEqual(groups['FINAL'][0], 'PROXY')
                 self.assertEqual(parsed['rules'][-1], 'MATCH,FINAL')
-                self.assertLess(parsed['rules'].index('RULE-SET,ai,AI'), parsed['rules'].index('RULE-SET,svc-google,GOOGLE'))
+                self.assertLess(parsed['rules'].index('RULE-SET,ai,AI'), parsed['rules'].index('RULE-SET,svc-google,PROXY'))
+                self.assertEqual([g['name'] for g in parsed['proxy-groups']], ['PROXY', 'AI', 'APPLE', 'MICROSOFT', 'PAYPAL', 'COMPANY_WAN', 'COMPANY_LAN', 'HOME', 'FINAL'])
+                self.assertIn('RULE-SET,futu-broker,PROXY', parsed['rules'])
                 self.assertEqual(parsed['proxies'], [node])
                 self.assertIn('svc-microsoft', parsed['rule-providers'])
                 if name == 'stash.yaml':
@@ -162,22 +204,51 @@ class PersonalTests(unittest.TestCase):
                 for name in ('surge.conf','shadowrocket.conf'):
                     self.assertIn('MICROSOFT = select, DIRECT, PROXY',after[name])
                     self.assertIn('PAYPAL = select, DIRECT, PROXY',after[name])
-                    cleaned='\n'.join(l for l in after[name].splitlines() if not l.startswith(('MICROSOFT =','PAYPAL =')) and not (l.startswith('RULE-SET,') and ('/microsoft.list,' in l or '/paypal.list,' in l)))+'\n'
+                    self.assertNotIn('GITHUB =',after[name])
+                    cleaned='\n'.join(l for l in after[name].splitlines() if not l.startswith(('MICROSOFT =','PAYPAL =')) and not (l.startswith('RULE-SET,') and ('/github.list,' in l or '/microsoft.list,' in l or '/paypal.list,' in l)))+'\n'
                     self.assertEqual(before[name],cleaned)
                 for name in ('mihomo.yaml','stash.yaml'):
                     old=yaml.safe_load(before[name]);new=yaml.safe_load(after[name])
                     groups={g['name']:g for g in new['proxy-groups']}
                     self.assertEqual(groups['MICROSOFT']['proxies'],['DIRECT','PROXY'])
                     self.assertEqual(groups['PAYPAL']['proxies'],['DIRECT','PROXY'])
-                    new['proxy-groups']=[g for g in new['proxy-groups'] if g['name'] not in ('MICROSOFT','PAYPAL')]
-                    for n in ('microsoft','paypal'):
+                    new['proxy-groups']=[g for g in new['proxy-groups'] if g['name'] not in ('GITHUB','MICROSOFT','PAYPAL')]
+                    for n in ('github','microsoft','paypal'):
                         new['rule-providers'].pop('svc-'+n)
-                        new['rules'].remove('RULE-SET,svc-'+n+','+n.upper())
+                        new['rules'].remove('RULE-SET,svc-'+n+','+personal.service_policy(n))
                         if name=='mihomo.yaml':new['dns']['nameserver-policy'].pop('rule-set:svc-'+n)
                     self.assertEqual(old,new)
                 personal_account={**account,'personal':preferences()}
                 personal_config={**config,'personal_profiles':{'fixture':str(state/'personal-settings/fixture.json')}}
                 self.assertEqual(d.render_profiles(personal_config,personal_account,converted,'',root,digest),d.render_profiles({**personal_config,'global_service_groups':True},personal_account,converted,'',root,digest))
+
+    def test_github_precedes_microsoft_and_stun_uses_real_dns_for_all_clients(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            config, root, digest, node, converted = fixture(state)
+            services(state)
+            config['global_service_groups'] = True
+            for personal_profile in (False, True):
+                account = {'nodes': [node], 'business_rules': True}
+                if personal_profile:
+                    account['personal'] = preferences()
+                    config['personal_profiles'] = {'fixture': 'unused'}
+                output = d.render_profiles(config, account, converted, '', root, digest)
+                self.assertEqual(output, personal.render_global_services(output, config, d.yaml_block))
+                for name in ('mihomo.yaml', 'stash.yaml'):
+                    data = yaml.safe_load(output[name])
+                    self.assertLess(data['rules'].index('RULE-SET,svc-github,PROXY'), data['rules'].index('RULE-SET,svc-microsoft,MICROSOFT'))
+                    self.assertNotIn('GITHUB', [g['name'] for g in data['proxy-groups']])
+                    self.assertTrue(set(personal.STUN_DOMAINS).issubset(data['dns']['fake-ip-filter']))
+                    if name == 'mihomo.yaml':
+                        policies = list(data['dns']['nameserver-policy'])
+                        self.assertLess(policies.index('rule-set:svc-github'), policies.index('rule-set:svc-microsoft'))
+                    else:
+                        self.assertFalse(any('rule-set:' in key for key in data['dns']['nameserver-policy']))
+                for name in ('surge.conf', 'shadowrocket.conf'):
+                    self.assertLess(output[name].index('/github.list,PROXY'), output[name].index('/microsoft.list,MICROSOFT'))
+                    self.assertNotIn('GITHUB =', output[name])
+                self.assertLess(output['loon.conf'].index('/github.list, policy=PROXY'), output['loon.conf'].index('/microsoft.list, policy=MICROSOFT'))
 
     def test_failed_restore_keeps_existing_override_and_detects_corrupt_backups(self):
         with tempfile.TemporaryDirectory() as temporary:

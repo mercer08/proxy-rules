@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build three client rule sets from immutable upstream snapshots."""
+"""Build four client rule sets from immutable upstream snapshots."""
 import argparse
 import hashlib
 import ipaddress
@@ -203,7 +203,7 @@ def render(output, sets, custom, config):
     for name, rules in all_sets.items():
         ordered = sorted(rules)
         classical = [serialize_rule(rule) for rule in ordered]
-        for client in ("surge", "shadowrocket"):
+        for client in ("surge", "shadowrocket", "loon"):
             write(output / client / (name + ".list"), "# Generated rules; no policy names.\n" + "\n".join(classical) + "\n")
         if name in sets and config["sets"][name]["kind"] == "domain":
             payload = [("+." if rule[0] == "DOMAIN-SUFFIX" else "") + rule[1] for rule in ordered]
@@ -234,16 +234,25 @@ def render(output, sets, custom, config):
                 lines.append("%s,%s%s/%s%s,%s" % (rule_type, base, client, name, ext, policy))
             lines.append("FINAL," + config["default_policy"])
             write(output / client / ("rules" + suffix + ".conf"), "\n".join(lines) + "\n")
+        # Loon matches local [Rule] entries before every remote list, so the
+        # ordered public sets stay together under [Remote Rule].
+        lines = ["# Rule fragment only: define PROXY, AI and APPLE policy groups in your Loon profile.",
+                 "[Rule]", "FINAL," + config["default_policy"], "", "[Remote Rule]"]
+        lines += ["%sloon/%s.list, policy=%s, tag=%s, enabled=true" % (base, name, policy, name) for name, policy in active]
+        write(output / "loon" / ("rules" + suffix + ".conf"), "\n".join(lines) + "\n")
+        mihomo_active = sorted(active, key=lambda item: 0 if item[0] in ("private", "lan") else
+                               1 if item[0] == "ai" else 2)
         lines = ["# Merge this fragment into a full profile with PROXY, AI and APPLE groups.", "rule-providers:"]
-        for name, _ in active:
+        for name, _ in mihomo_active:
             behavior = config["sets"][name]["kind"] if name in sets else "classical"
             if behavior == "ip":
                 behavior = "ipcidr"
+            url = config["sets"].get(name, {}).get("mihomo_url", base + "mihomo/" + name + ".yaml")
             lines.extend(["  " + name + ":", "    type: http", "    behavior: " + behavior,
-                          "    format: yaml", "    url: " + json.dumps(base + "mihomo/" + name + ".yaml"),
+                          "    format: yaml", "    url: " + json.dumps(url),
                           "    path: ./ruleset/" + name + ".yaml", "    interval: 86400", "    proxy: PROXY"])
         lines.append("rules:")
-        for name, policy in active:
+        for name, policy in mihomo_active:
             rule = "RULE-SET," + name + "," + policy
             if name in sets and config["sets"][name]["kind"] == "ip":
                 rule += ",no-resolve"

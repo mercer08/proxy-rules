@@ -175,3 +175,75 @@ jsDelivr 可达性需要在实际网络测试，无法保证所有大陆线路�
 ### 全员 AI 固定代理
 
 所有账号和设备的 Surge、Shadowrocket、Mihomo、Stash 配置中，AI 策略组仅保留 PROXY，移除 DIRECT 选择。个人偏好中的旧 AI 默认值不再影响输出。AI 规则内容、其他策略组默认值和节点文件不变。整文件手工覆盖需在部署时检查并针对 AI 组迁移，否则会保留旧选择。已导入的客户端需重新下载并导入配置。
+
+### 全员 GitHub 分流与 STUN DNS
+
+GitHub 规则在所有启用账号的 Surge、Shadowrocket、Loon、Mihomo、Stash 输出中直接指向 PROXY（不再单设 GITHUB 组）。
+GitHub 服务规则先于包含 GitHub 域名的 Microsoft 规则；Mihomo 的 GitHub DNS 分类也先于 Microsoft。
+Microsoft 与 PayPal 的独立出口保持原偏好。使用现有已校验 services 快照中的 github 规则，
+不把路由器内联规则复制成另一份长期维护的数据源。
+
+Mihomo 与 Stash 的 fake-ip-filter 排除 Google 的 stun.l.google.com、stun1 至 stun4 域名，
+保留已有私网排除。Surge/Shadowrocket 沿用各自 DNS 配置，不注入 Fake-IP 字段。
+Nikki 自身 UCI DNS 混入必须引用实际存在的 PROXY 组；生成器不能修复客户端插件内的旧组名。
+控制台更新后，已导入的离线配置仍需重新下载并导入。整文件覆盖仍须单独核对迁移。
+
+### 策略组与 Surge 对齐
+
+所有账号、所有 App 只保留 PROXY、AI、APPLE、MICROSOFT、PAYPAL、COMPANY_WAN、COMPANY_LAN、HOME、FINAL（后三个按账号需要出现）。
+GitHub、Google、Telegram、YouTube、Netflix、Steam 服务规则和券商规则 `futu-broker` 直接走 PROXY，不再单设策略组。
+个人策略文件里旧组（GOOGLE、GITHUB、TELEGRAM、YOUTUBE、NETFLIX、STEAM、BROKER）的默认值仍可保存，但不再生效。
+整文件手工覆盖不会自动迁移，需要单独核对。
+
+### 家庭 WireGuard（按账号）
+
+私有配置 `home_wireguard` 把账号 email 映射到状态目录 `wireguard-settings/` 下的 JSON（目录 0700、文件 0600，不进仓库）：
+
+```json
+{"schema_version": 1, "private_key": "…", "address": "10.77.0.3", "dns": "10.77.0.1", "mtu": 1280,
+ "home_router": "172.16.0.1", "test_url": "http://172.16.0.12/",
+ "home_domains": ["home.arpa"], "home_networks": ["172.16.0.0/16", "10.77.0.0/24"],
+ "home_ssids": ["家里 Wi-Fi 名称"],
+ "peer": {"public_key": "…", "preshared_key": "…", "endpoint": "example.com:51820",
+          "allowed_ips": ["172.16.0.0/24", "10.77.0.0/24"], "keepalive": 25}}
+```
+
+每台设备必须在路由器 `wg0` 上有独立 peer（独立密钥与地址），共用会互相顶掉连接。
+五种 App 都加入 `HOME-WIREGUARD` 节点，HOME 规则排在最前：
+
+- Surge：`HOME = subnet`，连上 `home_ssids` 里的 Wi-Fi 或家里网关（含有线）时 DIRECT，其他网络走隧道；节点自带 `test-url`。
+- 在家 HOME 走 DIRECT 时，家庭域名必须经家里路由器解析（公网 DNS 只有 WAN 地址）：
+  Surge 补 `[SSID Setting] ROUTER:路由器 dns-server=路由器`；Loon 在 `[Host]` 写 `ssid:家里Wi-Fi = server:路由器`。
+- Loon：节点测速只用全局地址，进不了只路由家里网段的隧道，所以用 `HOME-TUNNEL = fallback` 组承载 `test_url` 测速；
+  配置了 `home_ssids` 时 HOME 为 `ssid` 组（家里 Wi-Fi 直连，蜂窝和其他 Wi-Fi 走隧道），否则为手动选择。
+  节点列表里单独测 `HOME-WIREGUARD` 仍会失败，属于预期。
+- Shadowrocket：不支持 Surge 的 `[WireGuard]` 段，节点用官方单行格式
+  `wireguard,地址,端口,privateKey=,publicKey=,presharedKey=,ip=,dns=,mtu=,keepalive=,udp=1`（无 allowed-ips 字段）；
+  同 Loon 一样用 `HOME-TUNNEL = fallback` 组测速，HOME 手动选择，默认走 `HOME-TUNNEL`。
+- Stash：HOME 为 select 组，配置了 `home_ssids` 时加 `ssid-policy`（家里 Wi-Fi DIRECT，蜂窝和其他 Wi-Fi 走隧道）；macOS 需给 Stash 定位权限才能读 SSID。
+- Mihomo：内核不支持 SSID，HOME 手动选择，默认走隧道；家庭域名经隧道 DNS 解析。
+- Shadowrocket 配置文件不支持按 SSID 选策略组，只能在 App 的「场景」里按 Wi-Fi 切换整套路由模式。
+
+从隧道访问路由器自身（如 172.16.0.1 的管理页）受 `wg_home` 防火墙 input=REJECT 限制，只放行 DNS 和 ping；访问局域网其他设备经 forward 放行。
+
+## 按账号管理 DNS 与网络输入
+
+`network_profiles` 将 3x-ui email 映射到状态目录 `network-settings/` 下的私有 JSON。
+示例见 `network.example.json`。JSON 只保存网络输入，不复制节点或整份自动生成配置；
+规则、节点和模板更新仍可正常合并。输入与渲染器摘要均参与生成 fingerprint。
+
+支持 `mihomo`、`stash` 的 `dns`、`hosts`、`rules_prepend`，以及 `surge`、`loon`、
+`shadowrocket` 的 `[General]` 参数、静态 `hosts` 和 `rules_prepend`。DNS policy 按键合并，保留
+生成的 AI/服务分类及家庭 WireGuard 的 DNS；fake-ip-filter 追加去重。
+`hosts` 按域名合并，保留其他生成映射；相同域名以网络输入为准。
+私有输入不提交 GitHub；只提交生成器、示例、测试及脱敏文档。
+
+Nikki 保留 TUN、监听端口、控制 API 和防火墙接管等运行设置。将 DNS 服务器、
+policy、hosts、fake-ip-filter 和自定义 rules 迁入私有输入后，删除相应 UCI 混入项，
+避免覆盖生成结果。不可只更改复选框而保留会持续覆盖标量的 DNS UCI 字段；
+修改前生成混入候选并用路由器核心校验，备份 UCI/源配置/运行配置，失败整体回滚。
+
+隐私验收须检查实际运行配置与真实出口，不以源文件或 `ipv6: false` 代替。
+普通 53 劫持不能解密浏览器 DoH；按规则直连的 DNS 是明确的分流策略。
+STUN 测试仅证明所测浏览器、服务器和当时网络；不能承诺所有 WebRTC、IPv6、
+绕过设备和第三方 App 都不会暴露公网 IP。严格隐私与游戏/语音直连需明确取舍。

@@ -41,7 +41,7 @@ class Console:
         return json.loads((self.state / 'profiles.json').read_text())['accounts']
 
     def identity(self, record):
-        return Path(record['files']['surge.conf']).parent.name
+        return Path(next(iter(record['files'].values()))).parent.name
 
     def account(self, identifier):
         if not re.fullmatch(r'[a-f0-9]{24}', identifier):
@@ -127,6 +127,8 @@ class Console:
             d.generate(self.config)
 
     def edit(self, identifier, name, content, etag, reset=False):
+        if not reset:
+            raise ConsoleError(403, "完整配置只读，请在内网规则或个人策略中维护修改")
         existing = self.file(identifier, name)
         if etag != existing['etag']:
             raise ConsoleError(409, '服务器配置已变化，请重新加载后编辑')
@@ -190,6 +192,7 @@ class Console:
             archive.writestr('README.txt',
                 'Surge：导入 surge.conf。\nMihomo：导入 mihomo.yaml。\nStash：导入 stash.yaml。\n'
                 'Shadowrocket：导入并启用 shadowrocket.conf，已包含此账号的节点。node.txt 可单独导入节点。\n'
+                'Loon：导入 loon.conf，已包含此账号的节点。\n'
                 '仅分享本人的文件包。新规则版本需要重新通过 SSH 下载并导入完整配置。\n')
         return output.getvalue(), record['label'] + '.zip'
 

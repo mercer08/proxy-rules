@@ -75,7 +75,7 @@ class ConsoleTests(unittest.TestCase):
         status, body, _ = self.request('/api/accounts/' + self.other + '/download')
         self.assertEqual(status, 200)
         with zipfile.ZipFile(io.BytesIO(body)) as archive:
-            self.assertEqual(len(archive.namelist()), 7)
+            self.assertEqual(len(archive.namelist()), 8)
             self.assertIn('friend', archive.read('surge.conf').decode())
             self.assertNotIn('owner', archive.read('surge.conf').decode())
         self.assertEqual(self.request('/api/accounts/' + 'c' * 24 + '/download')[0], 404)
@@ -99,24 +99,17 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual(self.request('/api/refresh', 'POST', {}, navigation)[0], 403)
         self.assertEqual(self.request('/', 'POST', {}, navigation)[0], 403)
 
-    def test_edit_conflict_private_persistence_reset_and_failed_generation_rollback(self):
+    def test_generated_files_are_read_only_and_legacy_override_can_reset(self):
         app = self.server.console
         path = '/api/accounts/' + self.identifier + '/files/surge.conf'
         original = json.loads(self.request(path)[1])
         with patch.object(app, 'regenerate') as regenerate:
-            self.assertEqual(self.request(path, 'PUT', {'content': 'edit', 'etag': 'stale'})[0], 409)
-            self.assertEqual(self.request(path, 'PUT', {'content': '#!MANAGED-CONFIG https://example.com', 'etag': original['etag']})[0], 400)
-            self.assertEqual(self.request(path, 'PUT', {'content': 'edit', 'etag': original['etag']})[0], 200)
-            regenerate.assert_called_once()
+            for etag in ('stale', original['etag']):
+                self.assertEqual(self.request(path, 'PUT', {'content': 'edit', 'etag': etag})[0], 403)
+            regenerate.assert_not_called()
         override = self.state / 'profile-overrides' / self.identifier / 'surge.conf'
-        self.assertEqual(override.read_text(), 'edit')
-        self.assertEqual(override.stat().st_mode & 0o777, 0o600)
-        self.assertEqual(override.parent.stat().st_mode & 0o777, 0o700)
-        with patch.object(app, 'regenerate', side_effect=RuntimeError('do not expose payload')):
-            status, body, _ = self.request(path, 'PUT', {'content': 'bad', 'etag': original['etag']})
-            self.assertEqual(status, 503)
-            self.assertNotIn(b'payload', body)
-            self.assertEqual(override.read_text(), 'edit')
+        self.assertFalse(override.exists())
+        c.d.atomic_write(override, 'legacy override')
         with patch.object(app, 'regenerate'):
             self.assertEqual(self.request(path, 'DELETE', {'etag': original['etag']})[0], 200)
         self.assertFalse(override.exists())

@@ -37,7 +37,7 @@ Surge 及 Shadowrocket 的下载方式应在完整配置中设置。不要把 Gi
 2. 自定义强制直连、强制代理、自定义拦截。
    然后匹配公开专项规则 `wan-com`（PROXY）、`futu-broker`（PROXY）。内网域名仅由 SSH 私有配置台注入。
 3. 社区广告拦截：仅在 `rules-ads` 片段启用。
-4. AI：独立 `ai` 规则集（上游 `category-ai-!cn`），走 `AI` 策略组，默认 PROXY、可选 DIRECT。
+4. AI：独立 `ai` 规则集（上游 `category-ai-!cn`），走 `AI` 策略组。Mihomo 直接引用 MetaCubeX 的 `meta` 分支原始 YAML，使用 `behavior: domain`，每天通过代理更新，无需重导入完整配置。其他客户端继续使用固定快照转换出的规则；节点、DNS、策略组等配置结构变化仍需重新导入。
 5. Apple 与 iCloud：独立 `apple` 规则集，走 `APPLE` 策略组（默认 DIRECT，可选 PROXY）。
 6. 上游明确代理域名：`PROXY`。
 7. 上游国内／直连域名：`DIRECT`。

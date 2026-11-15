@@ -77,7 +77,7 @@ def insert_https_include(text):
 def prepare(source):
     BASE.mkdir(parents=True, exist_ok=True)
     CONFIG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for name in ["distribute.py", "console.py", "install.py", "nginx.conf", "config.example.json"]:
+    for name in ["distribute.py", "console.py", "install.py", "personal.py", "versions.py", "wireguard.py", "netsettings.py", "migrate_router_rules.py", "nginx.conf", "config.example.json"]:
         if (source / name).resolve() != (BASE / name).resolve():
             shutil.copy2(source / name, BASE / name)
     for name in ["templates", "systemd"]:

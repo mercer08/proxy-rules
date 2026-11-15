@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import hashlib
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -24,12 +25,15 @@ import urllib.request
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import personal
 import versions
+import wireguard
+import netsettings
 
 
 MAX_BUNDLE = 32 * 1024 * 1024
 MAX_EXPANDED = 96 * 1024 * 1024
 BUSINESS_RULE_SETS = {"lan-com", "wan-com", "futu-broker"}
-PROFILE_FILES = ("surge.conf", "mihomo.yaml", "stash.yaml", "shadowrocket.conf", "shadowrocket.txt", "node.txt")
+AI_RULES_URL = "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.yaml"
+PROFILE_FILES = ("surge.conf", "mihomo.yaml", "stash.yaml", "shadowrocket.conf", "shadowrocket.txt", "node.txt", "loon.conf")
 
 
 def profile_overrides(state):
@@ -186,6 +190,8 @@ def load_accounts(config, now=None):
     now = time.time() if now is None else now
     business_accounts = config.get("business_rule_accounts", [])
     personal_inputs = personal.inputs(config)
+    wireguard_inputs = wireguard.inputs(config)
+    network_inputs = netsettings.inputs(config)
     if not isinstance(business_accounts, list) or any(not isinstance(email, str) or not email for email in business_accounts):
         raise ValueError("Business rule accounts must be a list of account identifiers")
     database = Path(config["database"]).resolve()
@@ -235,6 +241,10 @@ def load_accounts(config, now=None):
                     "label": label, "nodes": [], "expiry": expiry,
                     "business_rules": email in business_accounts,
                     "final_policy": "PROXY" if email in config.get("proxy_final_accounts", business_accounts) else "DIRECT"})
+                if email in network_inputs:
+                    account['network'] = network_inputs[email]
+                if email in wireguard_inputs:
+                    account['home_wireguard'] = wireguard_inputs[email]
                 if email in personal_inputs:
                     account['personal'] = personal_inputs[email]
                     account['personal_path'] = str(personal.settings_paths(config)[email])
@@ -317,7 +327,10 @@ def verify_cdn(config, rules_dir, digest):
     origin = rule_origin(config, digest)
     files = set()
     raw = "https://raw.githubusercontent.com/" + config["repository"] + "/release/"
-    for client, filename in (("surge", "rules.conf"), ("mihomo", "rules.yaml"), ("shadowrocket", "rules.conf")):
+    fragments = [("surge", "rules.conf"), ("mihomo", "rules.yaml"), ("shadowrocket", "rules.conf")]
+    if (rules_dir / "loon/rules.conf").is_file():
+        fragments.append(("loon", "rules.conf"))
+    for client, filename in fragments:
         fragment = strip_private_rule_references((rules_dir / client / filename).read_text(), client)
         files.update(re.findall(re.escape(raw) + r"([a-z0-9-]+/[a-z0-9-]+\.(?:list|domainset|yaml))", fragment))
     if not files:
@@ -339,21 +352,84 @@ def private_lan_path(config):
     return Path(config["state_dir"]) / "private-rules/lan-com.list"
 
 
-def parse_private_lan(content):
-    """A private domain list without policies, URLs, or client configuration."""
+def private_lan_data(content):
+    """Private routing input: domain/CIDR direct rules and static host records."""
     if not isinstance(content, str) or len(content.encode()) > 2 * 1024 * 1024:
         raise ValueError("Private rules must be text smaller than 2 MB")
-    rules = []
+    rules, hosts = [], {}
     for number, raw in enumerate(content.splitlines(), 1):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         parts = line.split(",")
-        if (len(parts) != 2 or parts[0] not in ("DOMAIN", "DOMAIN-SUFFIX")
-                or not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*", parts[1])):
-            raise ValueError("Invalid private domain rule at line " + str(number))
-        rules.append(parts[0] + "," + parts[1].lower())
-    return list(dict.fromkeys(rules))
+        try:
+            kind = parts[0]
+            if kind == 'HOST' and len(parts) == 3:
+                domain, address = parts[1].lower(), str(ipaddress.ip_address(parts[2]))
+                if not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*", domain):
+                    raise ValueError()
+                if domain in hosts and hosts[domain] != address:
+                    raise ValueError()
+                hosts[domain] = address
+                rules.append('DOMAIN,' + domain)
+            elif kind in ('IP-CIDR', 'IP-CIDR6') and len(parts) in (2, 3):
+                if len(parts) == 3 and parts[2] != 'no-resolve':
+                    raise ValueError()
+                network = ipaddress.ip_network(parts[1], strict=True)
+                if kind == 'IP-CIDR6' and network.version != 6:
+                    raise ValueError()
+                rules.append(kind + ',' + str(network) + ',no-resolve')
+            elif (kind in ('DOMAIN', 'DOMAIN-SUFFIX') and len(parts) == 2
+                  and re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*", parts[1])):
+                rules.append(kind + ',' + parts[1].lower())
+            else:
+                raise ValueError()
+        except ValueError:
+            raise ValueError("Invalid private rule at line " + str(number)) from None
+    return list(dict.fromkeys(rules)), hosts
+
+
+def parse_private_lan(content):
+    return private_lan_data(content)[0]
+
+
+def private_direct(rule, policy='DIRECT'):
+    parts = rule.split(',')
+    return ','.join(parts[:2] + [policy] + parts[2:])
+
+
+def merge_private_hosts(profiles, config, account):
+    if not account.get('business_rules'):
+        return profiles
+    _, hosts = private_lan_data(private_lan_path(config).read_text())
+    if not hosts:
+        return profiles
+    output = dict(profiles)
+    for filename, text in profiles.items():
+        if filename in ('mihomo.yaml', 'stash.yaml'):
+            # Generated profiles have no host section; never merge whole-file overrides.
+            if re.search(r'(?m)^hosts:', text):
+                raise ValueError('Static hosts conflict with template')
+            text = '\n'.join(yaml_block({'hosts': hosts})) + '\n' + text
+            text = re.sub(r'(?m)^dns:\n', 'dns:\n  use-hosts: true\n', text, count=1)
+        elif filename in ('surge.conf', 'shadowrocket.conf', 'loon.conf'):
+            section = re.search(r'(?ms)^\[Host\]\n(.*?)(?=^\[|\Z)', text)
+            entries = dict(hosts)
+            if section:
+                for line in section[1].splitlines():
+                    if '=' not in line or line.lstrip().startswith(('#', ';')):
+                        continue
+                    domain, address = (part.strip() for part in line.split('=', 1))
+                    if domain in entries:
+                        if entries[domain] != address:
+                            raise ValueError('Static hosts conflict with template')
+                        del entries[domain]
+                extra = ''.join(domain + ' = ' + address + '\n' for domain, address in entries.items())
+                text = text[:section.end()].rstrip() + '\n' + extra + text[section.end():]
+            else:
+                text += '\n[Host]\n' + ''.join(domain + ' = ' + address + '\n' for domain, address in hosts.items())
+        output[filename] = text
+    return output
 
 
 def strip_private_rule_references(fragment, client):
@@ -373,7 +449,7 @@ def inject_private_lan(fragment, client, config):
         fragment = fragment.replace("rules:\n", provider + "rules:\n", 1)
         marker = r'(?m)^(  - "RULE-SET,(?:wan-com|futu-broker|proxy),|  - "MATCH,)'
         return re.sub(marker, lambda m: '  - "RULE-SET,lan-com,DIRECT"\n' + m.group(), fragment, count=1)
-    private = "# Private rule set: lan-com (SSH only)\n" + "".join(r + ",DIRECT\n" for r in rules)
+    private = "# Private rule set: lan-com (SSH only)\n" + "".join(private_direct(r) + "\n" for r in rules)
     marker = r"(?m)^(RULE-SET,[^\n,]*/(?:wan-com|futu-broker|proxy)\.list,|FINAL,)"
     return re.sub(marker, lambda m: private + m.group(), fragment, count=1)
 
@@ -436,6 +512,56 @@ def render_shadowrocket(config, rules_dir, digest, managed_url, business_rules=F
     return text + final_rules(fragment, "shadowrocket")
 
 
+def loon_proxy(node):
+    if node.get("type") != "vmess" or node.get("network") != "ws" or node.get("tls") is not True:
+        raise ValueError("Loon profile requires VMess/WebSocket/TLS")
+    if node.get("skip-cert-verify") is True:
+        raise ValueError("Loon certificate verification must remain enabled")
+    ws = node["ws-opts"]
+    values = [node["name"], node["server"], str(node["port"]), node["uuid"],
+              node["cipher"], ws["headers"]["Host"], ws["path"], node.get("servername", node["server"])]
+    if any(not isinstance(value, str) or not value or any(c in value for c in ',="\r\n') for value in values):
+        raise ValueError("Unsafe Loon node field")
+    name, server, port, uuid, cipher, host, path, sni = values
+    return (f'{name} = VMess,{server},{port},{cipher},"{uuid}",transport=ws,alterId={node.get("alterId", 0)},'
+            f"path={path},host={host},over-tls=true,sni={sni},skip-cert-verify=false,"
+            f"udp={'true' if node.get('udp') else 'false'}")
+
+
+def render_loon(config, rules_dir, digest, proxies, business_rules=False, final_policy=None):
+    """Surge-style intermediate; loon_profile() converts rule sets after shared post-processing."""
+    template = Path(config["templates_dir"]) / "loon.conf"
+    text = string.Template(template.read_text()).substitute(
+        PROXIES="\n".join(loon_proxy(node) for node in proxies), PROXY_NAMES=",".join(node["name"] for node in proxies))
+    choices = final_choices({"business_rules": business_rules, "final_policy": final_policy or ("PROXY" if business_rules else "DIRECT")})
+    text += "AI = select, PROXY\nAPPLE = select,DIRECT,PROXY\nFINAL = select," + ",".join(choices) + "\n"
+    # Loon reads the same classical lists; newer snapshots publish them under loon/.
+    fragment = prepare_rules((rules_dir / "shadowrocket/rules.conf").read_text(), "shadowrocket", config, rules_dir, digest, business_rules)
+    if (rules_dir / "loon/rules.conf").is_file():
+        fragment = fragment.replace("/shadowrocket/", "/loon/")
+    return text + final_rules(fragment, "loon")
+
+
+def loon_profile(text):
+    """Move RULE-SET lines to [Remote Rule]; Loon matches local rules before remote lists."""
+    header, body = text.split("[Rule]\n", 1)
+    local, remote, tags = [], [], set()
+    for line in body.splitlines():
+        match = re.fullmatch(r"RULE-SET,(https://[^,\s]+),([^,\s]+)(?:,[^\n]*)?", line.strip())
+        if not match:
+            if line.strip():
+                local.append(line)
+            continue
+        url, policy = match.groups()
+        base = ("svc-" if "@services-" in url else "") + re.sub(r"\.list$", "", url.rsplit("/", 1)[1])
+        tag, number = base, 2
+        while tag in tags:
+            tag, number = base + "-" + str(number), number + 1
+        tags.add(tag)
+        remote.append(url + ", policy=" + policy + ", tag=" + tag + ", enabled=true")
+    return header + "[Rule]\n" + "\n".join(local) + "\n\n[Remote Rule]\n" + "\n".join(remote) + "\n"
+
+
 def final_choices(account):
     policy = account.get("final_policy", "PROXY" if account.get("business_rules") else "DIRECT")
     if policy not in ("PROXY", "DIRECT"):
@@ -456,10 +582,10 @@ def render_stash(config, account, proxies, rules_dir, digest):
     patterns = ["localhost", "+.local", "+.lan", "+.home.arpa"]
     if account.get("business_rules"):
         private = parse_private_lan(private_lan_path(config).read_text())
-        rules = "".join("  - " + json.dumps(rule + ",DIRECT") + "\n" for rule in private)
+        rules = "".join("  - " + json.dumps(private_direct(rule)) + "\n" for rule in private)
         marker = r'(?m)^(  - "RULE-SET,(?:wan-com|futu-broker|ai|apple|proxy),|  - "MATCH,)'
         fragment = re.sub(marker, lambda m: rules + m.group(), fragment, count=1)
-        patterns += [("+." if rule.startswith("DOMAIN-SUFFIX,") else "") + rule.split(",")[1] for rule in private]
+        patterns += [("+." if rule.startswith("DOMAIN-SUFFIX,") else "") + rule.split(",")[1] for rule in private if rule.startswith(("DOMAIN,", "DOMAIN-SUFFIX,"))]
     base = {"mode": "rule", "log-level": "info", "ipv6": False,
             "proxies": proxies,
             "proxy-groups": [{"name": "PROXY", "type": "select", "proxies": [p["name"] for p in proxies]},
@@ -472,6 +598,129 @@ def render_stash(config, account, proxies, rules_dir, digest):
     # Stash HTTP providers do not need the Mihomo-only download proxy key.
     fragment = re.sub(r"(?m)^    proxy: PROXY\n", "", fragment)
     return "\n".join(yaml_block(base)) + "\n" + final_rules(rewrite_rules(fragment, config, digest), "stash")
+
+
+def final_last_profile(text, filename):
+    """Keep FINAL last without rewriting policy options or unrelated sections."""
+    def reorder(items, is_final):
+        selected = [item for item in items if is_final(item)]
+        if len(selected) > 1:
+            raise ValueError('Multiple FINAL entries in ' + filename)
+        return [item for item in items if not is_final(item)] + selected
+
+    if filename in ('surge.conf', 'shadowrocket.conf', 'loon.conf'):
+        for section, pattern in (('Proxy Group', r'^\s*FINAL\s*='), ('Rule', r'^\s*FINAL\s*,')):
+            def move(match):
+                lines = match.group(2).splitlines(keepends=True)
+                active = [i for i, line in enumerate(lines) if line.strip() and not line.lstrip().startswith(('#', '//', ';'))]
+                selected = [i for i in active if re.match(pattern, lines[i], re.I)]
+                if len(selected) > 1:
+                    raise ValueError('Multiple FINAL entries in ' + filename)
+                if selected and selected[0] != active[-1]:
+                    entry = lines.pop(selected[0])
+                    active = [i for i, line in enumerate(lines) if line.strip() and not line.lstrip().startswith(('#', '//', ';'))]
+                    if not entry.endswith('\n'):
+                        entry += '\n'
+                    lines.insert(active[-1] + 1 if active else 0, entry)
+                return match.group(1) + ''.join(lines)
+            text = re.sub(r'(?ms)(^\[' + section + r'\]\r?\n)(.*?)(?=^\[|\Z)', move, text)
+    elif filename in ('mihomo.yaml', 'stash.yaml'):
+        for key in ('proxy-groups', 'rules'):
+            def move(match):
+                body = match.group(2)
+                lines = body.splitlines(keepends=True)
+                candidates = [(i, len(m.group(1))) for i, line in enumerate(lines)
+                              if (m := re.match(r'^( *)(?:-)(?:\s|$)', line))]
+                if not candidates:
+                    return match.group(0)
+                indent = min(level for _, level in candidates)
+                starts = [i for i, level in candidates if level == indent]
+                blocks = [''.join(lines[start:end]) for start, end in zip(starts, starts[1:] + [len(lines)])]
+                def is_final(block):
+                    if key == 'proxy-groups':
+                        name = re.search(r'''(?m)^\s*(?:-\s*)?["']?name["']?\s*:\s*(["']?)([^\n#]+?)\1\s*$''', block)
+                        if not name:
+                            raise ValueError('Unsupported group syntax in ' + filename)
+                        return name.group(2).strip().upper() == 'FINAL'
+                    value = block.splitlines()[0].strip()[1:].strip().lstrip('\"\'')
+                    return bool(re.match(r'(?:MATCH|FINAL)\s*,', value, re.I))
+                ordered = reorder(blocks, is_final)
+                return match.group(1) + ''.join(lines[:starts[0]]) + ''.join(ordered)
+            text = re.sub(r'(?ms)(^' + key + r':[^\n]*\n)(.*?)(?=^[^\s#-][^\n]*:|\Z)', move, text)
+    return text
+
+
+def final_last_profiles(profiles):
+    return {name: final_last_profile(text, name) for name, text in profiles.items()}
+
+
+def ai_proxy_only_profile(text, filename):
+    """Keep AI on PROXY, even when a manual profile override adds DIRECT."""
+    if filename in ('surge.conf', 'shadowrocket.conf', 'loon.conf'):
+        def section(match):
+            def group(entry):
+                parts = [part.strip() for part in entry.group(2).split(',')]
+                if parts[0].lower() != 'select':
+                    raise ValueError('Unsupported AI group type in ' + filename)
+                options = [part for part in parts[1:] if '=' in part]
+                options = ['policy-select-name=PROXY' if part.split('=', 1)[0].strip() == 'policy-select-name'
+                           else part for part in options]
+                return entry.group(1) + ', '.join(['select', 'PROXY'] + options)
+            body, count = re.subn(r'(?m)^(\s*AI\s*=\s*)([^\r\n]+)', group, match.group(2))
+            if count > 1:
+                raise ValueError('Multiple AI groups in ' + filename)
+            return match.group(1) + body
+        return re.sub(r'(?ms)(^\[Proxy Group\]\r?\n)(.*?)(?=^\[|\Z)', section, text)
+    if filename in ('mihomo.yaml', 'stash.yaml'):
+        def section(match):
+            lines = match.group(2).splitlines(keepends=True)
+            candidates = [(i, len(m.group(1))) for i, line in enumerate(lines)
+                          if (m := re.match(r'^( *)-(?:\s|$)', line))]
+            if not candidates:
+                return match.group(0)
+            indent = min(level for _, level in candidates)
+            starts = [i for i, level in candidates if level == indent]
+            blocks = [''.join(lines[start:end]) for start, end in zip(starts, starts[1:] + [len(lines)])]
+            count = 0
+            for i, block in enumerate(blocks):
+                name = re.search(r'''(?m)^\s*(?:-\s*)?["']?name["']?\s*:\s*(["']?)([^\n#]+?)\1\s*$''', block)
+                if not name:
+                    raise ValueError('Unsupported group syntax in ' + filename)
+                if name.group(2).strip() != 'AI':
+                    continue
+                count += 1
+                # Replace only the proxies field; keep icons and other group metadata.
+                pattern = r'(?m)^( +)["\']?proxies["\']?\s*:[^\n]*\n(?:\1 +[^\n]*\n|\1-[^\n]*\n)*'
+                blocks[i], fields = re.subn(pattern, lambda field: field.group(1) + 'proxies: ["PROXY"]\n', block)
+                if fields != 1:
+                    raise ValueError('Unsupported AI proxies syntax in ' + filename)
+            if count > 1:
+                raise ValueError('Multiple AI groups in ' + filename)
+            return match.group(1) + ''.join(lines[:starts[0]]) + ''.join(blocks)
+        return re.sub(r'(?ms)(^proxy-groups:[^\n]*\n)(.*?)(?=^[^\s#-][^\n]*:|\Z)', section, text)
+    return text
+
+
+def normalize_profile(text, filename):
+    return final_last_profile(ai_proxy_only_profile(text, filename), filename)
+
+
+def normalize_profiles(profiles):
+    return {name: normalize_profile(text, name) for name, text in profiles.items()}
+
+
+def account_profile_outputs(profiles, config, folder):
+    """Restrict an opted-in account's generated files, including manual overrides."""
+    allowed = config.get('account_profile_files', {}).get(folder)
+    if allowed is None:
+        return profiles
+    if (not isinstance(allowed, list) or not allowed or
+            any(not isinstance(name, str) or name not in PROFILE_FILES or name not in profiles for name in allowed) or
+            len(set(allowed)) != len(allowed)):
+        raise ValueError('Invalid account profile file selection')
+    return {name: profiles[name] for name in allowed}
+
+
 
 
 def yaml_block(value, indent=0):
@@ -568,9 +817,56 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
             "stash.yaml": render_stash(config, account, proxies, rules_dir, digest),
             "shadowrocket.txt": base64.b64encode(("\n".join(uris) + "\n").encode()).decode() + "\n",
             "node.txt": "\n".join(uris) + "\n",
-            "shadowrocket.conf": shadowrocket}
+            "shadowrocket.conf": shadowrocket,
+            "loon.conf": render_loon(config, rules_dir, digest, proxies, business_rules, choices[0])}
     private = parse_private_lan(private_lan_path(config).read_text()) if account.get('personal') and business_rules else []
-    return personal.render_global_services(personal.render(profiles, config, account, private, yaml_block), config, yaml_block)
+    profiles = personal.render_global_services(personal.render(profiles, config, account, private, yaml_block), config, yaml_block)
+    profiles = wireguard.render(profiles, account.get("home_wireguard"), yaml_block)
+    profiles["loon.conf"] = loon_profile(profiles["loon.conf"])
+    # Upgrade old pinned fragments too, and apply after the generic DIRECT
+    # download rewrite so GitHub's raw endpoint is fetched through PROXY.
+    ai_provider = {"type": "http", "behavior": "domain", "format": "yaml",
+                   "url": AI_RULES_URL, "path": "./rules/ai.yaml",
+                   "interval": 86400, "proxy": "PROXY"}
+    profiles["mihomo.yaml"] = re.sub(
+        r'(?ms)^  ai:\n.*?(?=^  [a-z0-9-]+:\n|^rules:\n|\Z)',
+        lambda _: '\n'.join(yaml_block({'ai': ai_provider}, 2)) + '\n',
+        profiles["mihomo.yaml"])
+    profiles = merge_private_hosts(profiles, config, account)
+    profiles = netsettings.render(profiles, account.get("network"), yaml_block)
+    profiles["mihomo.yaml"] = prioritize_mihomo_ai(profiles["mihomo.yaml"])
+    return normalize_profiles(profiles)
+
+
+def prioritize_mihomo_ai(text):
+    """Keep local routing first, then AI before overlapping public services."""
+    header, marker, body = text.partition('rules:\n')
+    if not marker:
+        return text
+    lines = body.splitlines()
+    ai = '  - "RULE-SET,ai,AI"'
+    if ai in lines:
+        lines = [line for line in lines if line != ai]
+        local = ('RULE-SET,private,', 'RULE-SET,lan,', 'RULE-SET,lan-com,')
+        index = next((i for i, line in enumerate(lines)
+                      if ('RULE-SET,' in line and not any(rule in line for rule in local))
+                      or 'MATCH,' in line), len(lines))
+        lines.insert(index, ai)
+    # DNS classification must give AI the same precedence over service sets.
+    def dns_order(match):
+        blocks = re.findall(r'(?m)^    \S[^\n]*\n(?:      [^\n]*\n)*', match[1])
+        if ''.join(blocks) != match[1]:
+            raise ValueError('Unsupported generated nameserver-policy layout')
+        def rank(block):
+            key = block.splitlines()[0].strip().strip('"')
+            if key.startswith(('rule-set:private', 'rule-set:lan-com')):
+                return 0
+            if key.startswith('rule-set:ai'):
+                return 1
+            return 2 if key.startswith('rule-set:svc-github') else 3
+        return '  nameserver-policy:\n' + ''.join(sorted(blocks, key=rank))
+    header = re.sub(r'(?ms)^  nameserver-policy:\n(.*?)(?=^  \S|^\S|\Z)', dns_order, header)
+    return header + marker + '\n'.join(lines) + '\n'
 
 
 def generate(config):
@@ -589,13 +885,15 @@ def generate(config):
                                             "private_lan": private_lan_path(config).read_text() if any(a["business_rules"] for a in accounts.values()) else "",
                                             "services": personal_service_version,
                                             "personal_renderer": hashlib.sha256(Path(personal.__file__).read_bytes()).hexdigest(),
+                                            "wireguard_renderer": hashlib.sha256(Path(wireguard.__file__).read_bytes()).hexdigest(),
+                                            "network_renderer": hashlib.sha256(Path(netsettings.__file__).read_bytes()).hexdigest(),
                                             "generator": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}, sort_keys=True).encode()).hexdigest()
     current = state / "profiles.json"
     if current.exists() and json.loads(current.read_text()).get("fingerprint") == fingerprint:
         return
     if config.get("rules_delivery") == "jsdelivr":
         cdn_state = state / "cdn-verified.json"
-        expected = {"public_rule_scope": 2, "tag": rule_state["tag"], "digest": digest, "origin": rule_origin(config, digest)}
+        expected = {"public_rule_scope": 3, "tag": rule_state["tag"], "digest": digest, "origin": rule_origin(config, digest)}
         if not cdn_state.exists() or json.loads(cdn_state.read_text()) != expected:
             count = verify_cdn(config, rules_dir, digest)
             atomic_write(cdn_state, json.dumps(expected) + "\n")
@@ -617,6 +915,11 @@ def generate(config):
                 if folder + "/" + name in overrides:
                     profiles[name] = overrides[folder + "/" + name]
                     edited.append(name)
+            profiles = normalize_profiles(profiles)
+            profiles = account_profile_outputs(profiles, config, folder)
+            edited = [name for name in edited if name in profiles]
+            if account.get('personal') and set(profiles) != set(PROFILE_FILES):
+                raise ValueError('Personal versioned accounts require all profile files')
             directory = staging / folder
             directory.mkdir()
             for name, content in profiles.items():
@@ -633,6 +936,7 @@ def generate(config):
         shadowrocket = render_shadowrocket(config, rules_dir, digest,
                                            config["public_url"].rstrip("/") + "/proxy-config/shadowrocket.conf")
         shadowrocket = personal.render_global_services({'shadowrocket.conf': shadowrocket}, config, yaml_block)['shadowrocket.conf']
+        shadowrocket = normalize_profile(shadowrocket, "shadowrocket.conf")
         (shared / "shadowrocket.conf").write_text(shadowrocket)
         os.chmod(staging, 0o700)
         for path in staging.rglob("*"):
@@ -643,14 +947,14 @@ def generate(config):
         old_records = json.loads(current.read_text()).get('accounts', []) if current.exists() else []
         for record in records:
             if record.get('personal_path'):
-                identifier = Path(record['files']['surge.conf']).parent.name
-                old = next((r for r in old_records if r['files']['surge.conf'] == record['files']['surge.conf']), None)
-                if old and any(Path(old['files'][n]).read_bytes() != (destination / identifier / n).read_bytes() for n in PROFILE_FILES):
+                identifier = Path(next(iter(record['files'].values()))).parent.name
+                old = next((r for r in old_records if Path(next(iter(r['files'].values()))).parent.name == identifier), None)
+                if old and any(n not in old['files'] or Path(old['files'][n]).read_bytes() != (destination / identifier / n).read_bytes() for n in PROFILE_FILES):
                     versions.backup(config, old, identifier, atomic_write)
         switch_link(profiles_root / "current", destination)
         atomic_write(current, json.dumps({"fingerprint": fingerprint, "rules": digest, "accounts": records}, ensure_ascii=False, indent=2) + "\n")
         lines = ["# DMIT SSH 配置文件", "", "仅通过 SSH 下载配置；公网下载入口已关闭。", "",
-                 "Surge/Mihomo/Stash/Shadowrocket 导入本地配置文件。Shadowrocket 配置包含账号节点，可选用 node.txt 单独导入节点。", "",
+                 "Surge/Mihomo/Stash/Shadowrocket/Loon 导入本地配置文件。Shadowrocket 配置包含账号节点，可选用 node.txt 单独导入节点。", "",
                  "完整配置没有自动更新 URL。规则更新后需重新 SSH 导出完整配置。", ""]
         for record in records:
             lines.extend(["## " + record["label"], ""])
@@ -675,6 +979,7 @@ def export_profiles(config, stream, label=None):
               "Mihomo: import mihomo.yaml as a local profile.\n"
               "Stash: import stash.yaml, not mihomo.yaml.\n"
               "Shadowrocket: import and activate shadowrocket.conf; it includes this account's node.\n"
+              "Loon: import loon.conf; it includes this account's node.\n"
               "node.txt optionally provides the standalone vmess node address.\n"
               "No managed-profile URL. Download a new archive over SSH after rule updates.\n"
               "Share only this account folder.\n").encode()

@@ -212,7 +212,7 @@ class DistributionTests(unittest.TestCase):
                 d.main()
             cli_stream.flush()
             with tarfile.open(fileobj=io.BytesIO(cli_output.getvalue()), mode="r:gz") as exported:
-                self.assertEqual(len(exported.getmembers()), 7)
+                self.assertEqual(len(exported.getmembers()), 8)
                 self.assertTrue(all(m.name.startswith("friend/") for m in exported.getmembers()))
 
     def test_cdn_verification_rejects_tampering_and_never_fetches_business_rules(self):
@@ -332,7 +332,7 @@ rules:
                       "public_url": "https://203.0.113.1", "repository": "mercer08/proxy-rules"}
             for enabled in (False, True):
                 rendered = d.render_profiles(config, {"business_rules": enabled}, converted, "a" * 48, root, "b" * 64)
-                for filename in ("surge.conf", "mihomo.yaml", "shadowrocket.conf"):
+                for filename in ("surge.conf", "mihomo.yaml", "shadowrocket.conf", "loon.conf"):
                     for name in d.BUSINESS_RULE_SETS:
                         self.assertEqual(name in rendered[filename], enabled, filename + ": " + name)
                     self.assertIn("private", rendered[filename])
@@ -340,7 +340,7 @@ rules:
                 mihomo = yaml.safe_load(rendered["mihomo.yaml"])
                 dns = mihomo["dns"]
                 self.assertEqual("rule-set:lan-com" in dns["fake-ip-filter"], enabled)
-                self.assertEqual(dns["fake-ip-filter"], ["rule-set:private"] + (["rule-set:lan-com"] if enabled else []))
+                self.assertEqual(dns["fake-ip-filter"], ["rule-set:private"] + (["rule-set:lan-com"] if enabled else []) + list(d.personal.STUN_DOMAINS))
                 self.assertFalse(any('REJECT' in rule for rule in mihomo["rules"]))
                 self.assertNotIn("update-url", rendered["shadowrocket.conf"])
                 self.assertNotIn("#!MANAGED-CONFIG", rendered["surge.conf"])
@@ -357,7 +357,7 @@ rules:
             cdn_config = dict(config, rules_delivery="jsdelivr", _rules_tag="rules-now-" + "b" * 10)
             for enabled in (False, True):
                 rendered = d.render_profiles(cdn_config, {"business_rules": enabled}, converted, "a" * 48, root, "b" * 64)
-                for filename in ("surge.conf", "mihomo.yaml", "shadowrocket.conf"):
+                for filename in ("surge.conf", "mihomo.yaml", "shadowrocket.conf", "loon.conf"):
                     self.assertNotIn("/proxy-rules/", rendered[filename])
                     self.assertNotIn("githubusercontent", rendered[filename])
                     self.assertIn("cdn.jsdelivr.net/gh/", rendered[filename])
@@ -366,12 +366,44 @@ rules:
                         self.assertEqual("/" + name + "." in rendered[filename], enabled)
                 if enabled:
                     self.assertIn("type: inline", rendered["mihomo.yaml"])
-                    for filename in ("surge.conf", "shadowrocket.conf"):
+                    for filename in ("surge.conf", "shadowrocket.conf", "loon.conf"):
                         self.assertNotIn("IP-CIDR,203.0.113.0/24,PROXY,no-resolve", rendered[filename])
                         self.assertLess(rendered[filename].index("internal.business.test"), rendered[filename].index("/proxy.list"))
+                loon_rules, loon_remote = rendered["loon.conf"].split("[Remote Rule]\n")
+                self.assertIn('DMIT-Native = VMess,203.0.113.1,443,aes-128-gcm,"synthetic-secret",transport=ws', loon_rules)
+                self.assertIn("sni=203.0.113.1,skip-cert-verify=false", loon_rules)
+                self.assertEqual(loon_rules.split("[Rule]\n")[1].strip().splitlines()[-1], "FINAL,FINAL")
+                self.assertNotIn("RULE-SET,", rendered["loon.conf"])
+                self.assertEqual("DOMAIN-SUFFIX,internal.business.test,DIRECT" in loon_rules, enabled)
+                for line in loon_remote.splitlines():
+                    self.assertRegex(line, r"^https://cdn\.jsdelivr\.net/gh/mercer08/proxy-rules@rules-now-b{10}/shadowrocket/[a-z-]+\.list, policy=[A-Z]+, tag=[a-z-]+, enabled=true$")
                 dns = yaml.safe_load(rendered["mihomo.yaml"])["dns"]
                 self.assertEqual("rule-set:lan-com" in dns["nameserver-policy"], enabled)
                 self.assertEqual("rule-set:lan-com" in dns["fake-ip-filter"], enabled)
+
+    def test_loon_uses_its_own_cdn_lists_when_the_snapshot_has_them(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            origin = "https://raw.githubusercontent.com/mercer08/proxy-rules/release/"
+            for client in ("shadowrocket", "loon"):
+                (root / client).mkdir()
+            (root / "shadowrocket/rules.conf").write_text("[Rule]\nRULE-SET," + origin + "shadowrocket/private.list,DIRECT\nRULE-SET," + origin + "shadowrocket/proxy.list,PROXY\nFINAL,PROXY\n")
+            (root / "loon/rules.conf").write_text("[Rule]\nFINAL,PROXY\n\n[Remote Rule]\n" + origin + "loon/private.list, policy=DIRECT, tag=private, enabled=true\n")
+            config = {"templates_dir": str(ROOT / "deployment/templates"), "repository": "mercer08/proxy-rules",
+                      "rules_delivery": "jsdelivr", "_rules_tag": "rules-now-" + "b" * 10}
+            node = vmess_node()
+            text = d.loon_profile(d.render_loon(config, root, "b" * 64, [node, dict(node, name="DMIT-Second", udp=True)]))
+            self.assertIn("PROXY = select,DMIT-Native,DMIT-Second\n", text)
+            self.assertIn(",udp=true", text)
+            self.assertIn("FINAL = select,DIRECT,PROXY\n", text)
+            remote = text.split("[Remote Rule]\n")[1].splitlines()
+            self.assertEqual([line.split(", ")[2] for line in remote], ["tag=private", "tag=proxy"])
+            self.assertTrue(all("@rules-now-" + "b" * 10 + "/loon/" in line for line in remote))
+            self.assertEqual(d.normalize_profile(text, "loon.conf"), text)
+            with self.assertRaises(ValueError):
+                d.loon_proxy(dict(node, name="bad,name"))
+            with self.assertRaises(ValueError):
+                d.loon_proxy(dict(node, **{"skip-cert-verify": True}))
 
     def test_stash_uses_plain_private_rules_and_final_policy_is_account_scoped(self):
         with tempfile.TemporaryDirectory() as temporary:

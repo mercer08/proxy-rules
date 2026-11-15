@@ -9,12 +9,21 @@ import tempfile
 import time
 import zipfile
 
-FILES = ('surge.conf', 'mihomo.yaml', 'stash.yaml', 'shadowrocket.conf', 'shadowrocket.txt', 'node.txt')
-CONFIGS = FILES[:4]
+FILES = ('surge.conf', 'mihomo.yaml', 'stash.yaml', 'shadowrocket.conf', 'shadowrocket.txt', 'node.txt', 'loon.conf')
+# Versions backed up before Loon support remain readable and restorable.
+LEGACY_FILES = FILES[:6]
+CONFIGS = ('surge.conf', 'mihomo.yaml', 'stash.yaml', 'shadowrocket.conf', 'loon.conf')
+
+
+def present(record):
+    names = tuple(name for name in FILES if name in record['files'])
+    if set(names) not in (set(FILES), set(LEGACY_FILES)):
+        raise ValueError('Unexpected account file set')
+    return names
 
 
 def account_etag(record):
-    hashes = {name: hashlib.sha256(Path(record['files'][name]).read_bytes()).hexdigest() for name in FILES}
+    hashes = {name: hashlib.sha256(Path(record['files'][name]).read_bytes()).hexdigest() for name in present(record)}
     return hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
 
 
@@ -28,7 +37,7 @@ def root(config, identifier):
 
 
 def backup(config, record, identifier, atomic_write, reason='before-change'):
-    contents = {name: Path(record['files'][name]).read_bytes() for name in FILES}
+    contents = {name: Path(record['files'][name]).read_bytes() for name in present(record)}
     hashes = {name: hashlib.sha256(body).hexdigest() for name, body in contents.items()}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
     parent = root(config, identifier)
@@ -77,7 +86,7 @@ def read_version(config, identifier, version):
     if (path / 'manifest.json').is_symlink():
         raise ValueError('Unsafe version manifest')
     metadata = json.loads((path / 'manifest.json').read_text())
-    if set(metadata['sha256']) != set(FILES) or metadata['version'] != version:
+    if set(metadata['sha256']) not in (set(FILES), set(LEGACY_FILES)) or metadata['version'] != version:
         raise ValueError('Invalid version manifest')
     contents = {}
     for name, expected in metadata['sha256'].items():
@@ -114,9 +123,10 @@ def restore(config, record, identifier, version, atomic_write, regenerate):
     target.mkdir(parents=True, mode=0o700, exist_ok=True)
     os.chmod(target, 0o700)
     os.chmod(target.parent, 0o700)
-    existing = {name: (target / name).read_bytes() if (target / name).exists() else None for name in CONFIGS}
+    names = [name for name in CONFIGS if name in contents]
+    existing = {name: (target / name).read_bytes() if (target / name).exists() else None for name in names}
     try:
-        for name in CONFIGS:
+        for name in names:
             atomic_write(target / name, contents[name])
         regenerate()
     except Exception:
