@@ -1,15 +1,15 @@
 {
   "console.py": "47c3515f1bdc077a4f3d2318a62199960655293bc289b3f86ab2981ea771f1e1",
   "wireguard.py": "dc3d262abf038f276d2e9183f36cc8403354da4d42f5dd539691cef9174de723",
-  "distribute.py": "cf0b97853057886e198d9131fa4832073bb50643ce81e30e9f0e1ee18b41e1f6",
+  "distribute.py": "f46aca959ffb094f22de377cf3495d03b3740c05ebbf4f94e50e5c109fb88510",
   "migrate_router_rules.py": "636ed923ba50de164bdb4596deffb595d99fac1f81ded0dbcbfc8bed1a08e7cb",
   "personal.example.json": "051855f882e7a3efa2f4ee08fb644bd741c8cc1b9d827e87872fc8b72f541eb0",
-  "README.md": "d215af6fbdd8bf4cd31812ba0d4f412bb2ed556b1eff8ddadf6994a9a3271b1c",
+  "README.md": "b6ac01a24431944bbfb712d9fef5e0119d5768ac66888e13618478dd110a23d8",
   "config.example.json": "51df21757d0aed49f87cf16afce2098059e27e60f90da5c57b692c682a6a6a9d",
-  "netsettings.py": "2c7958bb3f36c5a815b1eee8d2d86b80d9103b089a413ee6611af99abd9ef2b3",
+  "netsettings.py": "c405312fd445d62d337de2206ed999f903c2c9180d7e449987eb0f388dea29c4",
   "versions.py": "e9e7531a21bcfae55720089c521774f67612907e63d2f23e343dcbf74642cb72",
-  "network.example.json": "615768a0932b87670f3d94f5b1a1c272cc3c273eb6a85179eda80fa389c3b223",
-  "install.py": "ca8a34ddb6783c79cbd0c98bfa768a5c297633a7b825110bdaabdeae4dd2d640",
+  "network.example.json": "fda3a7ac74fa2f92e0df2168c53368715a063c1e157dd139b0fc4e15c88f913e",
+  "install.py": "d5a140e85c8c74fa95161e9e89703dd16ede45c54f38c2f595741e8cab719b28",
   "nginx.conf": "c5fbcee8c189465e42564386cc46b8b891b720ad9e36f3504e93996be8edd728",
   "personal.py": "8d491c1f765578e974c6eec794dcf116e3d89d606cc47f66e8a7c8d948e985f7",
   "systemd/proxy-profiles-sync.service": "1b7361481a5eed3d70321f8aab413a2bb97bc3587d923038fe8be4d4dc79fb44",
@@ -42,5 +42,6 @@
   "console/tests/console.spec.js": "5df4b34d64f6d119294f2bdb18d4cf41b2b9e9181d994d5df11d13c56b035729",
   "console/scripts/licenses.js": "98200172fa9c60249ebe250284cdb6c3d9928a4870db6f355908b9d36425e8b7",
   "console/src/main.js": "35f506c3fff6752b5e5b82b79587573e66d7a32b7517424fde404ebe627fbea8",
-  "console/src/style.css": "9c50f61aea3e2068c6ffafc2cb736090628dc31af32797587a4f9c96d0e2ac78"
+  "console/src/style.css": "9c50f61aea3e2068c6ffafc2cb736090628dc31af32797587a4f9c96d0e2ac78",
+  "deviceguard.py": "0aebbc496384ee4267c1d525243ab82216a60137732a1d6fc704ab920b975b39"
 }

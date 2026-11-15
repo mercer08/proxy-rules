@@ -245,11 +245,35 @@ DNS policy 覆盖既有键时保留顺序，新键追加；生成器的 AI 分�
 私有输入不提交 GitHub；只提交生成器、示例、测试及脱敏文档。
 
 不要在 `rules_prepend` 中加入全局 STUN 端口或协议强制代理规则：这会覆盖
-HOME、公司、LAN 和既有直连例外。当前 STUN 遵循正常目标分流，直连目标可以
-观察到家庭公网出口；这不构成“WebRTC 无泄露”的保证。
+HOME、公司、LAN 和既有直连例外。需要协议拒绝时，Surge、Stash、Loon 使用
+`reject_stun: true`，生成 `PROTOCOL,STUN,REJECT`，包括内网 STUN 也会拒绝；
+Loon 要求 3.1.7+。Shadowrocket 的 PROTOCOL 子条件不代表支持 STUN，不写入；
+Mihomo 同样不写入不支持的协议规则。该选择会影响语音、会议及 P2P 打洞。
+
+路由器 Mihomo 可设置 `device_proxy: {"name":"DEVICE-PRIVATE","sources":["192.168.50.113/32"]}`。
+生成器创建独立 select 组，仅包含该账号的 UDP-capable VMess 节点与 REJECT；
+不间接引用可能包含 DIRECT 的其他分组。源地址规则位于所有普通分流之前，
+仅保留 RFC1918、回环/链路本地目标，以及到已配置节点 IP 的 TCP 端口传输通道。
+后者避免终端 Surge 与路由器套两层代理；其他国内、国外公网目标均进专用组。
+组后追加同源 REJECT，避免核心遇到不支持 UDP 的策略时继续匹配普通 DIRECT。
+
+严格模式还需部署 `deviceguard.py` 生成的 firewall4 include 到
+`/etc/nftables.d/30-device-proxy-guard.nft`。私有输入含 sources（不带 /32 的地址）、
+macs、endpoints（address/port）与 tun_device；设备 MAC 应与 DHCP 固定租约核对。
+forward 链在 fw4 接受 established 流量之前阻断设备的公网直连，仅保留私网、
+可信代理传输和 Nikki TUN；按 MAC 阻断公网 IPv6 及意外变化的 IPv4 源地址。
+此 include 独立于 Nikki 服务运行，不能随着 Nikki 停止而移除。
+部署时必须清除旧 flowtable 缓存，避免既有卸载连接绕过 forward 链；
+必须关闭受保护设备的公网端口映射，不保留 Ponte 直连回包例外。
+原有直接连接可能需要重连；这不影响其他设备的规则。
 
 路由器的 `system` 若指向本机 dnsmasq，而 dnsmasq 又转发到 Mihomo，就有回流风险。
 此部署的路由器账号将 private 策略设为 `rcode://refused`（已配置 hosts 仍优先应答），
+但必须用 `dns_policy_prepend` 将 `+.home.arpa` 和 RFC1918 反向区域先交给
+`127.0.0.1:53` 的 dnsmasq。只有确认 dnsmasq 的 local=/home.arpa/、bogus-priv
+及 Mihomo 自身 DNS 查询免于劫持后才能这样配置；已知 DHCP 名称/PTR 本地应答，
+未知名称应本地 NXDOMAIN，不能转回 Mihomo。其余 private 分类才使用 REFUSED。
+优先 DNS 输入在 AI/服务分类排序后仍保持最前，覆盖既有同名键且渲染幂等。
 lan-com 使用显式直连 DoH。终端账号的系统 DNS 用途不同，不统一替换。
 验证真实解析要选择 fake-ip-filter 内、无 hosts 映射的域名，并记录 rcode、
 真实地址和耗时；收到 198.18.0.0/16 仅代表 fake-ip 分配成功。

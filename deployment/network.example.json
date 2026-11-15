@@ -1,6 +1,71 @@
 {
   "schema_version": 1,
   "mihomo": {
+    "dns_policy_prepend": {
+      "+.home.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.10.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.168.192.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.16.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.17.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.18.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.19.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.20.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.21.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.22.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.23.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.24.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.25.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.26.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.27.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.28.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.29.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.30.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ],
+      "+.31.172.in-addr.arpa": [
+        "127.0.0.1:53"
+      ]
+    },
+    "device_proxy": {
+      "name": "DEVICE-PRIVATE",
+      "sources": [
+        "192.168.50.113/32"
+      ]
+    },
     "dns": {
       "respect-rules": true,
       "prefer-h3": false,
@@ -28,6 +93,7 @@
     }
   },
   "surge": {
+    "reject_stun": true,
     "general": {
       "encrypted-dns-server": "https://1.1.1.1/dns-query,https://8.8.8.8/dns-query",
       "encrypted-dns-follow-outbound-mode": "true",
@@ -39,5 +105,11 @@
       "PROTOCOL,DOQ,PROXY",
       "PROTOCOL,DOT,PROXY"
     ]
+  },
+  "stash": {
+    "reject_stun": true
+  },
+  "loon": {
+    "reject_stun": true
   }
 }

@@ -53,3 +53,10 @@ WireGuard 私钥、预共享密钥与 Nikki API secret 不变；不在报告、�
 - [Mihomo DNS 类型：system 与 rcode](https://wiki.metacubex.one/en/config/dns/type/)
 - [Surge 按域名指定 DNS](https://manual.nssurge.com/dns/local-dns-mapping.html)
 - [Surge 加密 DNS 与规则](https://manual.nssurge.com/dns/encrypted-dns.html)
+
+## 后续更正
+
+本报告的 private → REFUSED 方案遗漏 DHCP 名称与私网 PTR，不能视为家庭 DNS 已全面解决。
+后续已增加 dnsmasq 权威区域的优先策略，25 个 DHCP-only 名称及 PTR 实测通过。
+当前专用设备代理、原生 STUN 拒绝与 DNS 状态见 [后续报告](2026-11-15-device-proxy-and-local-dns.md)。
+源码摘要清单现为后续部署的 45 个文件，不能作为本报告历史版本的摘要。

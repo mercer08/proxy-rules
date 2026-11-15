@@ -9,9 +9,76 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'deployment'))
 import distribute as d
 import netsettings as n
+import deviceguard
 
 
 class NetworkSettingsTests(unittest.TestCase):
+    def test_local_dns_authority_precedes_private_policy_and_ai_reordering(self):
+        original = {'dns': {'nameserver-policy': {'rule-set:private': ['rcode://refused'],
+                    'rule-set:ai': ['https://1.1.1.1/dns-query#AI']}},
+                    'rules': ['RULE-SET,private,DIRECT', 'RULE-SET,ai,AI', 'MATCH,PROXY']}
+        source = '\n'.join(d.yaml_block(original)) + '\n'
+        policies = {'+.home.arpa': ['127.0.0.1:53'], '+.10.in-addr.arpa': ['127.0.0.1:53']}
+        settings = {'schema_version': 1, 'mihomo': {'dns_policy_prepend': policies}}
+        output = n.render({'mihomo.yaml': source}, settings, d.yaml_block)
+        output['mihomo.yaml'] = d.prioritize_mihomo_ai(output['mihomo.yaml'], policies)
+        parsed = yaml.safe_load(output['mihomo.yaml'])['dns']['nameserver-policy']
+        self.assertEqual(list(parsed)[:3], ['+.home.arpa', '+.10.in-addr.arpa', 'rule-set:private'])
+        again = n.render(output, settings, d.yaml_block)
+        again['mihomo.yaml'] = d.prioritize_mihomo_ai(again['mihomo.yaml'], policies)
+        self.assertEqual(output, again)
+
+    def test_device_proxy_overrides_public_direct_but_keeps_lan_and_transport(self):
+        source = '\n'.join(d.yaml_block({'dns': {'enable': True}, 'proxy-groups': [
+            {'name': 'PROXY', 'type': 'select', 'proxies': ['test-node']}], 'rules': [
+            'DOMAIN-SUFFIX,example.cn,DIRECT', 'MATCH,DIRECT']})) + '\n'
+        settings = {'schema_version': 1, 'mihomo': {'device_proxy': {
+            'name': 'DEVICE-PRIVATE', 'sources': ['172.16.0.113/32']}}}
+        proxies = [{'name': 'test-node', 'type': 'vmess', 'server': '8.8.8.8', 'port': 443, 'udp': True}]
+        output = n.render({'mihomo.yaml': source}, settings, d.yaml_block, proxies)
+        parsed = yaml.safe_load(output['mihomo.yaml'])
+        self.assertEqual(parsed['proxy-groups'][-1], {'name': 'DEVICE-PRIVATE', 'type': 'select', 'proxies': ['test-node', 'REJECT']})
+        guard = 'SRC-IP-CIDR,172.16.0.113/32,DEVICE-PRIVATE'
+        index = parsed['rules'].index(guard)
+        self.assertEqual(parsed['rules'][index + 1], 'SRC-IP-CIDR,172.16.0.113/32,REJECT')
+        self.assertLess(index, parsed['rules'].index('DOMAIN-SUFFIX,example.cn,DIRECT'))
+        self.assertTrue(any('IP-CIDR,192.168.0.0/16' in rule for rule in parsed['rules'][:index]))
+        self.assertTrue(any('NETWORK,tcp' in rule and 'DST-PORT,443' in rule for rule in parsed['rules'][:index]))
+        self.assertEqual(output, n.render(output, settings, d.yaml_block, proxies))
+        proxies[0]['udp'] = False
+        with self.assertRaisesRegex(ValueError, 'UDP-capable'):
+            n.render({'mihomo.yaml': source}, settings, d.yaml_block, proxies)
+
+    def test_native_stun_reject_only_supported_clients(self):
+        settings = {'schema_version': 1, **{client: {'reject_stun': True} for client in ('surge', 'stash', 'loon')}}
+        profiles = {'surge.conf': '[General]\n[Rule]\nFINAL,PROXY\n', 'loon.conf': '[General]\n[Rule]\nFINAL,PROXY\n',
+                    'stash.yaml': 'dns:\n  enable: true\nrules:\n  - MATCH,PROXY\n', 'mihomo.yaml': 'unchanged', 'shadowrocket.conf': 'unchanged'}
+        output = n.render(profiles, settings, d.yaml_block)
+        for name in ('surge.conf', 'loon.conf'):
+            self.assertIn('[Rule]\nPROTOCOL,STUN,REJECT\n', output[name])
+        self.assertEqual(yaml.safe_load(output['stash.yaml'])['rules'][0], 'PROTOCOL,STUN,REJECT')
+        self.assertEqual(output['mihomo.yaml'], 'unchanged')
+        self.assertEqual(output['shadowrocket.conf'], 'unchanged')
+        self.assertEqual(output, n.render(output, settings, d.yaml_block))
+        for client in ('mihomo', 'shadowrocket'):
+            with self.assertRaises(ValueError):
+                n.validate({'schema_version': 1, client: {'reject_stun': True}})
+
+    def test_device_firewall_closes_direct_ipv4_ipv6_and_validates_inputs(self):
+        settings = {'sources': ['172.16.0.113'], 'macs': ['02:00:00:00:00:01'],
+                    'endpoints': [{'address': '8.8.8.8', 'port': 443}], 'tun_device': 'nikki'}
+        text = deviceguard.render(settings)
+        self.assertIn('hook forward priority -10', text)
+        self.assertIn('block direct IPv4', text)
+        self.assertIn('block public IPv6', text)
+        self.assertIn('unexpected IPv4 source', text)
+        self.assertNotIn('ct state established', text)  # Established direct flows must also be stopped.
+        self.assertLess(text.index('trusted proxy transport'), text.index('block direct IPv4'))
+        with self.assertRaises(ValueError):
+            deviceguard.render({**settings, 'tun_device': 'nikki"; accept'})
+        with self.assertRaises(ValueError):
+            deviceguard.render({**settings, 'macs': ['invalid']})
+
     def test_general_update_does_not_remove_wireguard_dns(self):
         source = '[General]\ndns-server = system\n[WireGuard home-wg]\ndns-server = 10.0.0.1\n[Rule]\nFINAL,PROXY\n'
         settings = {'schema_version': 1, 'surge': {'general': {'dns-server': '1.1.1.1'}}}
@@ -23,11 +90,11 @@ class NetworkSettingsTests(unittest.TestCase):
             n.render({'surge.conf': '[Rule]\nFINAL,PROXY\n'}, settings, d.yaml_block)
 
     def test_prepend_targets_top_level_rules_not_sub_rules(self):
-        source = 'dns:\n  enable: true\nsub-rules:\n  child:\n    - MATCH,DIRECT\nrules:\n  - MATCH,PROXY\n'
+        source = 'dns:\n  enable: true\nsub-rules:\n  child:\n    - MATCH,DIRECT\nrules:\n  - "RULE-SET,ai,AI"\n  - MATCH,PROXY\n'
         settings = {'schema_version': 1, 'mihomo': {'rules_prepend': ['DOMAIN,example.com,DIRECT']}}
-        parsed = yaml.safe_load(n.render({'mihomo.yaml': source}, settings, d.yaml_block)['mihomo.yaml'])
+        parsed = yaml.safe_load(d.prioritize_mihomo_ai(n.render({'mihomo.yaml': source}, settings, d.yaml_block)['mihomo.yaml']))
         self.assertEqual(parsed['sub-rules'], {'child': ['MATCH,DIRECT']})
-        self.assertEqual(parsed['rules'], ['DOMAIN,example.com,DIRECT', 'MATCH,PROXY'])
+        self.assertEqual(parsed['rules'], ['DOMAIN,example.com,DIRECT', 'RULE-SET,ai,AI', 'MATCH,PROXY'])
 
     def test_overridden_dns_policy_keeps_precedence(self):
         source = '\n'.join(d.yaml_block({'dns': {'nameserver-policy': {

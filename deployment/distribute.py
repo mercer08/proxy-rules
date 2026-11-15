@@ -839,16 +839,18 @@ def render_profiles(config, account, converted, token, rules_dir, digest):
         lambda _: '\n'.join(yaml_block({'ai': ai_provider}, 2)) + '\n',
         profiles["mihomo.yaml"])
     profiles = merge_private_hosts(profiles, config, account)
-    profiles = netsettings.render(profiles, account.get("network"), yaml_block)
-    profiles["mihomo.yaml"] = prioritize_mihomo_ai(profiles["mihomo.yaml"])
+    profiles = netsettings.render(profiles, account.get("network"), yaml_block, proxies)
+    dns_priority = (account.get('network') or {}).get('mihomo', {}).get('dns_policy_prepend', {})
+    profiles["mihomo.yaml"] = prioritize_mihomo_ai(profiles["mihomo.yaml"], dns_priority)
     return normalize_profiles(profiles)
 
 
-def prioritize_mihomo_ai(text):
+def prioritize_mihomo_ai(text, dns_priority=()):
     """Keep local routing first, then AI before overlapping public services."""
-    header, marker, body = text.partition('rules:\n')
-    if not marker:
+    section = re.search(r'(?m)^rules:\n', text)
+    if not section:
         return text
+    header, marker, body = text[:section.start()], section[0], text[section.end():]
     lines = body.splitlines()
     ai = '  - "RULE-SET,ai,AI"'
     if ai in lines:
@@ -864,6 +866,8 @@ def prioritize_mihomo_ai(text):
         if ''.join(blocks) != match[1]:
             raise ValueError('Unsupported generated nameserver-policy layout')
         def rank(block):
+            if any(block.startswith('    ' + json.dumps(name) + ':') or block.startswith('    ' + name + ':') for name in dns_priority):
+                return -1
             key = block.splitlines()[0].strip().strip('"')
             if key.startswith(('rule-set:private', 'rule-set:lan-com')):
                 return 0
