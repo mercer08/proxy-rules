@@ -61,6 +61,9 @@ class ConsoleTests(unittest.TestCase):
 
     def test_loopback_only_origin_guards_and_no_cache(self):
         self.assertEqual(self.server.server_address[0], '127.0.0.1')
+        self.records[1]['home_wireguard'] = True
+        (self.state / 'profiles.json').write_text(json.dumps({'accounts': self.records}))
+        self.assertEqual([a['homeWireguard'] for a in json.loads(self.request('/api/accounts')[1])['accounts']], [False, True])
         status, body, headers = self.request('/api/accounts')
         self.assertEqual(status, 200)
         self.assertEqual(len(json.loads(body)['accounts']), 2)

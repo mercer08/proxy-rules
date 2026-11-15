@@ -224,6 +224,12 @@ GitHub、Google、Telegram、YouTube、Netflix、Steam 服务规则和券商规�
 - Mihomo：内核不支持 SSID，HOME 手动选择，默认走隧道；家庭域名经隧道 DNS 解析。
 - Shadowrocket 配置文件不支持按 SSID 选策略组，只能在 App 的「场景」里按 Wi-Fi 切换整套路由模式。
 
+访客账号（只开放单台主机）：`allowed_ips` 与 `home_networks` 都只写该主机的 `/32`，不写 `home_domains`、`home_ssids`，
+并省略 `home_router`——否则对方自家网关恰好同号时，Surge 会误判"在家"改走 DIRECT 并改用对方路由器 DNS。
+客户端的 `allowed_ips` 只决定哪些流量进隧道，持有私钥的人可以自行改大，**不是访问控制**；
+真正的限制必须在路由器上做：为该 peer 单独分配地址，firewall 中先放行"该源地址 → 目标主机"，
+再对该源地址的其余 forward（含 LAN、WAN 出口与其他 wg 地址）和 input（含 DNS）一律 REJECT。
+
 从隧道访问路由器自身（如 172.16.0.1 的管理页）受 `wg_home` 防火墙 input=REJECT 限制，只放行 DNS 和 ping；访问局域网其他设备经 forward 放行。
 
 ## 按账号管理 DNS 与网络输入

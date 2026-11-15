@@ -262,7 +262,12 @@ function accountRow(account) {
   const avatar = document.createElement('span'); avatar.className = 'avatar device-avatar'; avatar.innerHTML = iconSVG(device);
   const details = document.createElement('span'); details.className = 'account-details';
   const name = document.createElement('strong'); name.textContent = account.label;
-  const hint = document.createElement('small'); hint.textContent = `${devices[device].name} · ${apps.length} 个 App`; details.append(name, hint);
+  const title = document.createElement('span'); title.className = 'account-name'; title.append(name);
+  if (account.homeWireguard) {
+    const tag = document.createElement('span'); tag.className = 'account-tag'; tag.textContent = 'HOME-WG';
+    tag.dataset.tip = '已加入 HOME-WIREGUARD：HOME 组经家庭 WireGuard 隧道访问家里内网'; tag.setAttribute('aria-label', tag.dataset.tip); title.append(tag);
+  }
+  const hint = document.createElement('small'); hint.textContent = `${devices[device].name} · ${apps.length} 个 App`; details.append(title, hint);
   // Mini coverage chart: one bar per app, in tab order, so the router (Mihomo only) is obvious at a glance.
   const coverage = document.createElement('span'); coverage.className = 'coverage';
   coverage.dataset.tip = apps.length ? '已生成：' + apps.map(file => appNames[file]).join('、') : '没有可导入的 App 配置';

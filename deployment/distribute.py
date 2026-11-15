@@ -938,6 +938,8 @@ def generate(config):
                             "nodes": [n["name"] for n in account["nodes"]], "edited": edited,
                             "final_policy": account.get("final_policy", "PROXY" if account["business_rules"] else "DIRECT"),
                             "files": {name: str(profiles_root / "current" / folder / name) for name in profiles}})
+            if account.get('home_wireguard'):
+                records[-1]['home_wireguard'] = True
             if account.get('personal'):
                 records[-1]['personal_path'] = account['personal_path']
                 records[-1]['personal_defaults'] = {g: personal.choices(account['personal'], g)[0] for g in personal.PUBLIC_GROUPS}

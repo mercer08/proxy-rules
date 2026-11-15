@@ -300,6 +300,9 @@ test('accounts carry a device color, icon and app coverage so profiles are not m
   await expect(page.locator('#accounts .account.selected .coverage')).toHaveAttribute('data-tip', '已生成：Mihomo');
   expect(await page.locator('#account-avatar').evaluate(e => getComputedStyle(e).backgroundColor)).not.toBe(phoneColor);
   await expect(page.locator('.side-group').first()).toContainText('我的设备');
+  // Only accounts with the home WireGuard tunnel are tagged in the sidebar.
+  await expect(page.locator('#accounts .account-tag')).toHaveCount(1);
+  await expect(page.locator('#accounts button').filter({ hasText: '我的 Mac' }).locator('.account-tag')).toHaveText('HOME-WG');
   await expect(page.locator('.side-group').last()).toContainText('朋友');
   await expect(page.locator('#accounts button').filter({ hasText: '我的路由器' })).toContainText('路由器 · ');
   await page.screenshot({ path: test.info().outputPath('devices.png') });

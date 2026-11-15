@@ -72,7 +72,7 @@ class Console:
                  'businessRules': r['business_rules'], 'nodes': r['nodes'],
                  'finalPolicy': r.get('final_policy', 'PROXY' if r['business_rules'] else 'DIRECT'),
                  'edited': r.get('edited', []), 'files': list(r['files']),
-                 'personal': bool(r.get('personal_path')), 'defaults': r.get('personal_defaults', {})} for r in self.records()]
+                 'personal': bool(r.get('personal_path')), 'homeWireguard': bool(r.get('home_wireguard')), 'defaults': r.get('personal_defaults', {})} for r in self.records()]
 
     def personal_settings(self, identifier):
         record = self.account(identifier)

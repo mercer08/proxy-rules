@@ -73,6 +73,9 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; paddi
 .account.selected .avatar { color: #fff; background: var(--device); box-shadow: none; }
 .account-details { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 .account-details strong { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.account-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* Marks accounts whose HOME group uses the home WireGuard tunnel. */
+.account-tag { flex-shrink: 0; height: 15px; padding: 0 5px; border-radius: 4px; font-size: 9.5px; font-weight: 600; line-height: 15px; letter-spacing: .2px; color: color-mix(in oklab, var(--device) 80%, var(--text)); background: color-mix(in srgb, var(--device) 12%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--device) 26%, transparent); }
 .account-details small { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .account.selected strong { color: var(--device-ink); }
 /* Five bars = Surge, Mihomo, Stash, Shadowrocket, Loon; filled when the account gets that app. */

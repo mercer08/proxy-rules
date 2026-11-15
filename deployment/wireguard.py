@@ -21,7 +21,9 @@ def validate(settings):
     if not isinstance(settings, dict) or settings.get('schema_version') != 1 or set(settings) - KEYS:
         raise ValueError('Home WireGuard settings schema_version must be 1')
     key(settings.get('private_key'))
-    for name in ('address', 'dns', 'home_router'):
+    # home_router is optional: a guest who never joins the home network must not treat a
+    # same-numbered gateway on their own network as "at home".
+    for name in ('address', 'dns') + (('home_router',) if 'home_router' in settings else ()):
         if ipaddress.ip_address(settings.get(name, '')).version != 4:
             raise ValueError('IPv4 ' + name + ' required')
     if not isinstance(settings.get('mtu', 1280), int) or not 1280 <= settings.get('mtu', 1280) <= 1500:
@@ -161,7 +163,8 @@ def render_conf(text, filename, settings):
         node = NAME + ' = wireguard, section-name=' + SECTION + (', test-url=' + settings['test_url'] + ', test-timeout=8' if settings.get('test_url') else '')
         # Home Wi-Fi names and the home router both mean "at home"; the router also covers wired Macs.
         ssids = ''.join(', ' + ('"SSID:' + ssid + '"' if ' ' in ssid else 'SSID:' + ssid) + '=DIRECT' for ssid in settings.get('home_ssids', []))
-        home = 'HOME = subnet, default=' + NAME + ssids + ', ROUTER:' + settings['home_router'] + '=DIRECT'
+        router = ', ROUTER:' + settings['home_router'] + '=DIRECT' if settings.get('home_router') else ''
+        home = 'HOME = subnet, default=' + NAME + ssids + router
     nodes = nodes.rstrip() + '\n' + node + '\n\n'
     lines = [line for line in groups.rstrip('\n').splitlines() if not re.match(r'\s*HOME\s*=', line)]
     lines = [('# COMPANY_LAN is local only. HOME uses the home WireGuard tunnel.' if line.startswith('# Local LAN access only.') else line) for line in lines]
@@ -171,10 +174,10 @@ def render_conf(text, filename, settings):
     body = '\n'.join(merge_rules(body.splitlines(), rules(settings))) + '\n'
     # At home HOME is DIRECT, and public DNS only knows the WAN address of home names,
     # so home networks must resolve through the home router.
-    router = settings['home_router']
-    if filename == 'surge.conf' and not re.search(r'(?m)^ROUTER:' + re.escape(router) + r'\s', body):
+    router = settings.get('home_router')
+    if router and filename == 'surge.conf' and not re.search(r'(?m)^ROUTER:' + re.escape(router) + r'\s', body):
         body = add_lines(body, 'SSID Setting', ['ROUTER:' + router + ' dns-server="' + router + '", encrypted-dns-server="off"'])
-    elif filename == 'loon.conf' and settings.get('home_ssids'):
+    elif router and filename == 'loon.conf' and settings.get('home_ssids'):
         general = add_lines(general, 'Host', ['ssid:' + ssid + ' = server:' + router for ssid in settings['home_ssids']]).rstrip('\n') + '\n\n'
     return general + '[Proxy]\n' + nodes + '[Proxy Group]\n' + groups + '[Rule]\n' + body
 

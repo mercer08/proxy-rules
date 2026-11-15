@@ -1,4 +1,5 @@
 """Synthetic offline fixtures only; never use production credentials in UI tests."""
+import base64
 import json
 import hashlib
 from pathlib import Path
@@ -38,8 +39,11 @@ manifest = build_services.build(service_output, 'a' * 40, service_inputs)
 service_target = state / 'service-rules' / manifest['content_digest']; service_target.parent.mkdir()
 service_output.rename(service_target)
 c.d.atomic_write(state / 'personal-services.json', json.dumps({'tag': 'services-fixture-' + manifest['content_digest'][:10], 'digest': manifest['content_digest']}))
+home_wireguard = {'schema_version': 1, 'private_key': base64.b64encode(bytes(32)).decode(), 'address': '10.77.0.3', 'dns': '10.77.0.1',
+                  'home_router': '192.168.50.1', 'home_domains': ['home.arpa'], 'home_networks': ['192.168.50.0/24'],
+                  'peer': {'public_key': base64.b64encode(bytes([1] * 32)).decode(), 'endpoint': 'home.example:51820', 'allowed_ips': ['192.168.50.0/24']}}
 def load_accounts(config):
-    return {**accounts, 'router': {'label': '我的路由器', 'nodes': [{'name': 'dmit-lax'}], 'business_rules': True}, 'phone': {'label': '我的 iPhone', 'nodes': [{'name': 'dmit-lax'}], 'business_rules': True,
+    return {**accounts, 'tunnel': {'label': '我的 Mac', 'nodes': [{'name': 'dmit-lax'}], 'business_rules': True, 'home_wireguard': home_wireguard}, 'router': {'label': '我的路由器', 'nodes': [{'name': 'dmit-lax'}], 'business_rules': True}, 'phone': {'label': '我的 iPhone', 'nodes': [{'name': 'dmit-lax'}], 'business_rules': True,
             'personal': json.loads(personal_path.read_text()), 'personal_path': str(personal_path),
             'final_policy': c.d.personal.choices(json.loads(personal_path.read_text()), 'FINAL')[0]}}
 c.d.load_accounts = load_accounts
