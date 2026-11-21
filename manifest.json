@@ -2,7 +2,7 @@
   "schema_version": 1,
   "upstream": {
     "repository": "MetaCubeX/meta-rules-dat",
-    "commit": "0d0d829978761194d931a121d9f4e7d82446e6f8"
+    "commit": "f7119625e8e225d0e5a06b137465e0c10cb906f8"
   },
   "counts": {
     "microsoft": 757,
@@ -15,10 +15,10 @@
     "steam": 61
   },
   "input_sha256": {
-    "microsoft": "325c5b45b4bebcb11c3f1a7d388aa32591d5121245260fd0f10f5c9ab6a99e9e",
+    "microsoft": "08a8495f194b0849ee168a4fc5de5dba618df61d134cbf7b6b0b2c0dfaf8070a",
     "paypal": "3b13b6dfcb94d207c474bf7ae4ee754d13aabac93f649e8e07bd3a6df8b785c3",
-    "google": "9903333945b71d8357b61d570e8badeff73156bf4efd82ba70be4d9c7c45d74d",
-    "github": "d13336c90dca1e73ab42da19c865e2e7f116d5288d061bc1bf9597fbc411d623",
+    "google": "159ad93fa8f961b7bf24f21ddbe8b6b0db148ec3210c89a87e040c4f29d16405",
+    "github": "b30aa61d5476764f5194f2f4a4b566f5055882394e75291af2237366e2077f80",
     "youtube": "ec32854438b8ad4e2f2f2ee0d578834c667f1d0cec4c82357e34629452d2fc5d",
     "netflix": "8df5a09035034ed72169f566ccc08779f30cebc2bf47681bf512fceef1296a68",
     "telegram": "4712014d6fcb434daf8b03b4740e37445109b42bc0e824f6acbce733ef92abb0",
@@ -28,7 +28,7 @@
     "microsoft.yaml": "9633e574e549012819d7b320245c51a47e2418c4d2621aefef695a69d796cbbf",
     "steam.yaml": "4aa480f1da0914dbc69fb51aceb820c3eb4e56e6058ed3d15cad2b25bbfc40c5",
     "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
-    "NOTICE.md": "1041c07db23cca516cce7715d966dbca00d1adb919987a8a8188cb4dd8567e21",
+    "NOTICE.md": "4fb7df25ba4ff5101c206bfe9bddb146ff57ec383adfe7f3b0fb3cc71735cb4e",
     "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
     "steam.list": "cedce81e4540d1dda9d11c90f3d65d5b8b505b98bd2f4221b95480056950079e",
     "netflix.yaml": "1afc79701c3f817928021a8d88770659d58814a6af40c9c3867f39e44c73a294",
@@ -44,5 +44,5 @@
     "telegram.list": "a1a39e45b89ce8da3def2ed862bdeef0fa67acb9ca50ea3cb017b9a2dd4623d8",
     "paypal.list": "7a1343cf94d90a02cb95088092e9b96009074c5c24ff51b01d695e035093a23b"
   },
-  "content_digest": "e661ac5fed7d63df3c145c100b45ab6bea8d572ab1179f85ffbcb7ebbc6c304e"
+  "content_digest": "4c435d228090bc3c63fd137943d6b74ec2807991a7ffe436d42a66d6b59eac7a"
 }
