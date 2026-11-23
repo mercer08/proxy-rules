@@ -2,7 +2,7 @@
   "schema_version": 1,
   "upstream": {
     "repository": "MetaCubeX/meta-rules-dat",
-    "commit": "ca7d9d641cf31a25d465861d8af0352e6721b6e0"
+    "commit": "13c258bce343dfc81d5600e535a59588386ef4b9"
   },
   "counts": {
     "microsoft": 757,
@@ -15,9 +15,9 @@
     "steam": 61
   },
   "input_sha256": {
-    "microsoft": "303145a120bfad734d04e40eab1210fc334d9c71ce40a78a1415c0378abdc23e",
+    "microsoft": "78082eb847568688226bb7060d60a05fe1357e0feb8d58747ff928f12a1ce031",
     "paypal": "3b13b6dfcb94d207c474bf7ae4ee754d13aabac93f649e8e07bd3a6df8b785c3",
-    "google": "69552158f31d651274d21003e0079c261d47c575cdf52b6e3cd93e8d9979afa3",
+    "google": "051253d26d213c59b617b84e58da24d7bb5aafae682f0d3ccae63687444557c3",
     "github": "d13336c90dca1e73ab42da19c865e2e7f116d5288d061bc1bf9597fbc411d623",
     "youtube": "ec32854438b8ad4e2f2f2ee0d578834c667f1d0cec4c82357e34629452d2fc5d",
     "netflix": "8df5a09035034ed72169f566ccc08779f30cebc2bf47681bf512fceef1296a68",
@@ -28,7 +28,7 @@
     "microsoft.yaml": "9633e574e549012819d7b320245c51a47e2418c4d2621aefef695a69d796cbbf",
     "steam.yaml": "4aa480f1da0914dbc69fb51aceb820c3eb4e56e6058ed3d15cad2b25bbfc40c5",
     "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
-    "NOTICE.md": "e390090148e75226598c70d75066bf8a4426875cf2bebf0cf953eb72fb7b8dcf",
+    "NOTICE.md": "110d317e1b1c61e6bb8d13c41b63d54c2c914459153d0cf63607443aabbfef93",
     "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
     "steam.list": "cedce81e4540d1dda9d11c90f3d65d5b8b505b98bd2f4221b95480056950079e",
     "netflix.yaml": "1afc79701c3f817928021a8d88770659d58814a6af40c9c3867f39e44c73a294",
@@ -44,5 +44,5 @@
     "telegram.list": "a1a39e45b89ce8da3def2ed862bdeef0fa67acb9ca50ea3cb017b9a2dd4623d8",
     "paypal.list": "7a1343cf94d90a02cb95088092e9b96009074c5c24ff51b01d695e035093a23b"
   },
-  "content_digest": "0fbdc520d75d9b5d1a9f9337f94a8e5314bc7db511fe34b8498509e2d8065e00"
+  "content_digest": "fdc4e56d4b6d850c07310915aac82eac7600a1a2eb1f6e15df7334bd94404dd2"
 }
