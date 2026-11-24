@@ -2,12 +2,12 @@
   "schema_version": 1,
   "upstream": {
     "repository": "MetaCubeX/meta-rules-dat",
-    "commit": "13c258bce343dfc81d5600e535a59588386ef4b9"
+    "commit": "ce616601064422e7acfe75ea201549dc7372becf"
   },
   "counts": {
     "microsoft": 757,
     "paypal": 245,
-    "google": 1078,
+    "google": 1079,
     "github": 66,
     "youtube": 178,
     "netflix": 24,
@@ -15,9 +15,9 @@
     "steam": 61
   },
   "input_sha256": {
-    "microsoft": "78082eb847568688226bb7060d60a05fe1357e0feb8d58747ff928f12a1ce031",
+    "microsoft": "459c68d8861e81155dc77ed22c94d2d6b45ac4c65f7c23161dbb6fa2170b6f25",
     "paypal": "3b13b6dfcb94d207c474bf7ae4ee754d13aabac93f649e8e07bd3a6df8b785c3",
-    "google": "051253d26d213c59b617b84e58da24d7bb5aafae682f0d3ccae63687444557c3",
+    "google": "d256d9dfc27e2a29ac511c3a5d2981cd8597d2d9a12c6c2b46c6cce8eccbf59f",
     "github": "d13336c90dca1e73ab42da19c865e2e7f116d5288d061bc1bf9597fbc411d623",
     "youtube": "ec32854438b8ad4e2f2f2ee0d578834c667f1d0cec4c82357e34629452d2fc5d",
     "netflix": "8df5a09035034ed72169f566ccc08779f30cebc2bf47681bf512fceef1296a68",
@@ -25,24 +25,24 @@
     "steam": "47ad4e79ea85ae5c2d31cd9b8d7d9e5206cc09d371dba11d8d20e10d9da720c9"
   },
   "sha256": {
-    "microsoft.yaml": "9633e574e549012819d7b320245c51a47e2418c4d2621aefef695a69d796cbbf",
-    "steam.yaml": "4aa480f1da0914dbc69fb51aceb820c3eb4e56e6058ed3d15cad2b25bbfc40c5",
-    "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
-    "NOTICE.md": "110d317e1b1c61e6bb8d13c41b63d54c2c914459153d0cf63607443aabbfef93",
-    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
-    "steam.list": "cedce81e4540d1dda9d11c90f3d65d5b8b505b98bd2f4221b95480056950079e",
-    "netflix.yaml": "1afc79701c3f817928021a8d88770659d58814a6af40c9c3867f39e44c73a294",
-    "netflix.list": "3de90a5741f543406544a82c3aa4b3f2b0f59f3dcdd20b997d15f6b408d6d8fd",
-    "microsoft.list": "5f74346cec626be92249154f0306c749f9fc64d1b3e50b24bb5583848a2c7b98",
-    "github.list": "dad439a302276b6265dc98e96ee6f7b47686180139573cf6ee963f43162b2e9b",
-    "telegram.yaml": "37f0646c006a0479400080637c112f53a0e4b85c196df9f373a9e43f1e4b3f55",
-    "google.list": "3f4b10d23c2ac8a725991c517c877c3deba03bf1f80c2bd5237d6da4aab90e9d",
-    "google.yaml": "1a0ec32a91d0f9cafb9f802c0ad710b931272992e718f2b60967e982e994a979",
-    "github.yaml": "864cfd595e3ead01a03a79b33831923f4038cd0974a35767a09be0c1e98f0a3a",
     "paypal.yaml": "193d738a17871d2d6a8053c59fd91e6bc639ede219d99d59b520c4ca2de68efb",
     "youtube.list": "b1b22969700b54f84e8c4717cbae5b29bf601990fc4286424fc11b57099abcb6",
-    "telegram.list": "a1a39e45b89ce8da3def2ed862bdeef0fa67acb9ca50ea3cb017b9a2dd4623d8",
-    "paypal.list": "7a1343cf94d90a02cb95088092e9b96009074c5c24ff51b01d695e035093a23b"
+    "steam.list": "cedce81e4540d1dda9d11c90f3d65d5b8b505b98bd2f4221b95480056950079e",
+    "google.list": "5d37d4fe898ab0670abfd3d4ece68cca4fb1e728bcfb5ccada04d67b8b58f6c0",
+    "google.yaml": "1a7a2039254989001fe51bbf732aa8c7bae9e3f3fd09c34e54e2db7eedd0dbb2",
+    "netflix.yaml": "1afc79701c3f817928021a8d88770659d58814a6af40c9c3867f39e44c73a294",
+    "github.list": "dad439a302276b6265dc98e96ee6f7b47686180139573cf6ee963f43162b2e9b",
+    "github.yaml": "864cfd595e3ead01a03a79b33831923f4038cd0974a35767a09be0c1e98f0a3a",
+    "paypal.list": "7a1343cf94d90a02cb95088092e9b96009074c5c24ff51b01d695e035093a23b",
+    "microsoft.list": "5f74346cec626be92249154f0306c749f9fc64d1b3e50b24bb5583848a2c7b98",
+    "NOTICE.md": "d90c588096f57b444485846bbb9c74fb89d54b88ffc3d79cb073d34423d6d1e2",
+    "youtube.yaml": "a69839d2998ffa48f1d98355bcf4392372f343fc997f1e8e05f1f295ff0132f4",
+    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "telegram.yaml": "37f0646c006a0479400080637c112f53a0e4b85c196df9f373a9e43f1e4b3f55",
+    "steam.yaml": "4aa480f1da0914dbc69fb51aceb820c3eb4e56e6058ed3d15cad2b25bbfc40c5",
+    "microsoft.yaml": "9633e574e549012819d7b320245c51a47e2418c4d2621aefef695a69d796cbbf",
+    "netflix.list": "3de90a5741f543406544a82c3aa4b3f2b0f59f3dcdd20b997d15f6b408d6d8fd",
+    "telegram.list": "a1a39e45b89ce8da3def2ed862bdeef0fa67acb9ca50ea3cb017b9a2dd4623d8"
   },
-  "content_digest": "fdc4e56d4b6d850c07310915aac82eac7600a1a2eb1f6e15df7334bd94404dd2"
+  "content_digest": "81acecf56c1be4365d7160b95aaa2a0556d8fe7d5d593d2ea7e940db16f1214b"
 }
