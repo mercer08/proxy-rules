@@ -89,6 +89,7 @@ client-teamviewer-com.trafficmanager.net
 clients1.google.com
 cloudsync-prod.s3.amazonaws.com
 configuration-lb.ls-apple.com.akadns.net
+courses.myecnu.org
 crl.microsoft.com
 crl.versign.net
 csis-prod.s3.amazonaws.com
@@ -5538,6 +5539,7 @@ zftksc.launches.appsflyersdk.com
 .cabletvdirectv.com
 .cachefly.com
 .cachefly.net
+.cachix.org
 .cacnw.com
 .cactusvpn.com
 .cad-mep.com
@@ -9320,10 +9322,12 @@ zftksc.launches.appsflyersdk.com
 .fastlane.ci
 .fastlane.tools
 .fastly-edge.com
+.fastly-insights.com
 .fastly-terrarium.com
 .fastly.com
 .fastly.io
 .fastly.net
+.fastlydns.net
 .fastlylabs.com
 .fastlylb.net
 .fastpic.ru
@@ -24475,6 +24479,7 @@ zftksc.launches.appsflyersdk.com
 .viu.tv
 .vivaldi.com
 .vivaxnxx.com
+.vivox.com
 .vivthomas.com
 .vixen.com
 .vixengroup.com
